@@ -1,6 +1,5 @@
 import os
 import sys
-import requests
 
 # Asegurar rutas absolutas exactas antes de cualquier importación interna
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -9,15 +8,26 @@ if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
 from core.guardrails import Guardrails
+from groq import Groq
 
 class AtomumEngine:
     def __init__(self):
         self.guardrails = Guardrails()
         self.is_active = True
         self.api_key = os.getenv("ATOMUM_LLM_API_KEY") or os.getenv("GROQ_API_KEY")
-        self.api_endpoint = os.getenv("ATOMUM_LLM_ENDPOINT", "https://api.groq.com/openai/v1/chat/completions")
         self.model_name = os.getenv("ATOMUM_LLM_MODEL", "openai/gpt-oss-120b")
-        print("🧠 [Engine] Núcleo de razonamiento de Atomum inicializado y blindado.")
+        
+        # Inicializar el cliente oficial de Groq si la API Key está disponible
+        if self.api_key:
+            try:
+                self.client = Groq(api_key=self.api_key)
+                print("🧠 [Engine] Cliente oficial de Groq inicializado con éxito.")
+            except Exception as e:
+                self.client = None
+                print(f"❌ [Engine Error] No se pudo inicializar el cliente de Groq: {e}")
+        else:
+            self.client = None
+            print("⚠️ [Engine] Advertencia: No se encontró API Key de Groq configurada.")
 
     def process_instruction(self, instruction: str) -> str:
         if not instruction or not isinstance(instruction, str):
@@ -35,16 +45,12 @@ class AtomumEngine:
         if any(pattern in cleaned_instruction.lower() for pattern in dangerous_patterns):
             return "🛡️ [Engine] Alerta de seguridad: Patrón destructivo bloqueado por el motor."
             
-        # 3. Conexión con la API Cognitiva de Groq
-        if self.api_key:
+        # 3. Conexión con la API Cognitiva mediante el SDK oficial
+        if self.client:
             try:
-                headers = {
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "model": self.model_name,
-                    "messages": [
+                completion = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
                         {
                             "role": "system", 
                             "content": "Actúas como el núcleo cognitivo autónomo de ATOMUM. Responde de forma directa, técnica y analítica estructurando código y soluciones robustas."
@@ -54,19 +60,15 @@ class AtomumEngine:
                             "content": cleaned_instruction
                         }
                     ],
-                    "temperature": 0.2
-                }
-                response = requests.post(self.api_endpoint, headers=headers, json=payload, timeout=30)
-                if response.status_code == 200:
-                    result_data = response.json()
-                    ai_response = result_data["choices"][0]["message"]["content"]
-                    return ai_response
-                else:
-                    return f"⚠️ [Engine] Error en la API de Groq (Código {response.status_code}): {response.text}"
+                    temperature=0.2,
+                    max_tokens=2048
+                )
+                ai_response = completion.choices[0].message.content
+                return ai_response
             except Exception as e:
-                return f"❌ [Engine] Fallo de conexión con el endpoint de Groq: {e}"
+                return f"❌ [Engine] Fallo en la llamada al SDK de Groq: {e}"
         else:
-            return "🧠 [Engine] Modo Autónomo Local: Falta configurar ATOMUM_LLM_API_KEY en los secretos del entorno."
+            return "🧠 [Engine] Modo Autónomo Local: Falta configurar la API Key de Groq en los secretos de Streamlit."
 
 if __name__ == "__main__":
     engine = AtomumEngine()
