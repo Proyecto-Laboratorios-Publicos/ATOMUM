@@ -26,7 +26,8 @@ if Path(".env").exists():
 GH_TOKEN: str = os.getenv("GH_TOKEN", "")
 REPO_URL: str = os.getenv("REPO_URL", "")
 BASE_BRANCH: str = os.getenv("BASE_BRANCH", "main")
-WORKDIR: Path = Path(os.getenv("WORKDIR", "/tmp/gitops_workdir")).resolve()IMPROVEMENT_FILE: Path = Path(os.getenv("IMPROVEMENT_FILE", "improvement.json")).resolve()
+WORKDIR: Path = Path(os.getenv("WORKDIR", "/tmp/gitops_workdir")).resolve()
+IMPROVEMENT_FILE: Path = Path(os.getenv("IMPROVEMENT_FILE", "improvement.json")).resolve()
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s', handlers=[logging.StreamHandler(sys.stdout)])
 
