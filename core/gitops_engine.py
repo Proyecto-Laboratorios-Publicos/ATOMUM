@@ -30,19 +30,25 @@ WORKDIR: Path = Path(os.getenv("WORKDIR", "/tmp/gitops_workdir")).resolve()
 def get_improvement_path() -> Path:
     """
     Construye y devuelve la ruta absoluta al archivo improvement.json
-    priorizando GITHUB_WORKSPACE (GitHub Actions) o un fallback local.
+    buscándolo de forma inteligente en el workspace de GitHub Actions o la raíz local.
     """
+    # 1. Si GitHub Actions define el workspace, lo usamos de forma directa
     workspace = os.getenv("GITHUB_WORKSPACE")
     if workspace:
-        root_dir = Path(workspace).resolve()
-    else:
-        # Fallback local: core está al mismo nivel que improvement.json
-        root_dir = Path(__file__).resolve().parents[1]
-    
-    improvement_path = root_dir / "improvement.json"
-    if not improvement_path.is_file():
-        raise FileNotFoundError(f"⚠️ improvement.json no encontrado en '{improvement_path}'.")
-    return improvement_path
+        candidate = Path(workspace) / "improvement.json"
+        if candidate.is_file():
+            return candidate
+
+    # 2. Si estamos corriendo localmente o el workspace apunta a otro lado, 
+    # buscamos desde la ubicación actual del script subiendo niveles hasta hallar el archivo.
+    current_dir = Path(__file__).resolve().parent
+    for parent in [current_dir] + list(current_dir.parents):
+        candidate = parent / "improvement.json"
+        if candidate.is_file():
+            return candidate
+
+    # 3. Fallback final apuntando al directorio actual de ejecución
+    return Path(os.getcwd()) / "improvement.json"
 
 # Asignamos la ruta global que consumirá load_improvement
 IMPROVEMENT_PATH: Path = get_improvement_path()
@@ -66,13 +72,15 @@ def get_github_headers() -> Dict[str, str]:
 
 def load_improvement() -> Dict[str, Any]:
     """
-    Lee y parsea improvement.json usando la ruta segura orientada al workspace.
+    Lee y parsea improvement.json resolviendo la ruta de forma dinámica.
     """
-    if not IMPROVEMENT_PATH.is_file():
-        raise FileNotFoundError(f"Improvement file not found: {IMPROVEMENT_PATH}")
+    improvement_path = get_improvement_path()
+    
+    if not improvement_path.is_file():
+        raise FileNotFoundError(f"Improvement file not found at: {improvement_path}")
     
     try:
-        data = json.loads(IMPROVEMENT_PATH.read_text(encoding="utf-8"))
+        data = json.loads(improvement_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ValueError(f"improvement.json contiene JSON inválido: {exc.msg}")
 
