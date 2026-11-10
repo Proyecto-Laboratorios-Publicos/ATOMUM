@@ -29,22 +29,54 @@ REPO_URL: str = os.getenv("REPO_URL", "")
 BASE_BRANCH: str = os.getenv("BASE_BRANCH", "main")
 WORKDIR: Path = Path(os.getenv("WORKDIR", "/tmp/gitops_workdir")).resolve()
 
+# ----------------------------------------------------------------------
+#  NUEVO: obtención segura de la ruta a improvement.json en GitHub Actions
+# ----------------------------------------------------------------------
+import os
+from pathlib import Path
+
 def get_improvement_path() -> Path:
     """
-    Devuelve la ruta absoluta al archivo improvement.json.
-    Prioriza GITHUB_WORKSPACE (inyectado por GitHub Actions). Si no está, usa el directorio actual.
+    Construye y devuelve la ruta absoluta al archivo ``improvement.json`` que
+    se encuentra en la raíz del workspace del runner de GitHub Actions.
+
+    La variable de entorno ``GITHUB_WORKSPACE`` es establecida por GitHub
+    Actions y apunta al directorio raíz del checkout del repositorio.
+    Si la variable no está definida (ej. ejecución local), se recurre a la
+    ubicación del proyecto como fallback.
+
+    Returns
+    -------
+    pathlib.Path
+        Ruta absoluta al archivo ``improvement.json``.
+
+    Raises
+    ------
+    FileNotFoundError
+        Si el archivo no existe en la ruta calculada.
     """
-    workspace_root = os.getenv("GITHUB_WORKSPACE", os.getcwd())
-    return Path(workspace_root) / "improvement.json"
+    # 1️⃣  Intentamos obtener la raíz del workspace desde la variable de entorno.
+    workspace = os.getenv("GITHUB_WORKSPACE")
+    if workspace:
+        root_dir = Path(workspace).resolve()
+    else:
+        # Fallback para ejecuciones locales: usamos el directorio del proyecto.
+        # ``core`` está al mismo nivel que el archivo ``improvement.json``.
+        root_dir = Path(__file__).resolve().parents[1]   # …/core/ → proyecto raíz
+    # 2️⃣  Construimos la ruta completa al archivo.
+    improvement_path = root_dir / "improvement.json"
 
-IMPRESS_FILE: Path = get_improvement_path()
-IMPROVEMENT_FILE: Path = IMPROVEMENT_PATH = get_improvement_path()
+    # 3️⃣  Validamos su existencia de forma explícita para que el motor falle
+    #     con un mensaje claro y no con un traceback genérico.
+    if not improvement_path.is_file():
+        raise FileNotFoundError(
+            f"⚠️  improvement.json no encontrado en '{improvement_path}'. "
+            "Comprueba que el archivo exista y que la variable GITHUB_WORKSPACE "
+            "apunte al directorio correcto."
+        )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s %(levelname)s %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
+    return improvement_path
+# ----------------------------------------------------------------------
 
 def log_struct(message: str, **kwargs: Any) -> None:
     payload = {"msg": message, **kwargs}
