@@ -4,7 +4,10 @@ from datetime import datetime
 
 class ContextManager:
     def __init__(self, memory_file="memory/atomum_memory.json"):
-        self.memory_file = memory_file
+        # Asegurar ruta absoluta basada en la ubicación del archivo actual
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.memory_file = os.path.join(base_dir, memory_file)
+        
         self.cloud_mode = os.getenv("ATOMUM_CLOUD_MODE", "false").lower() == "true"
         print(f"🧠 [ContextManager] Inicializado. Modo nube (Cloud): {self.cloud_mode}")
 
@@ -18,11 +21,11 @@ class ContextManager:
         }
 
         if self.cloud_mode:
-            # Aquí se integrará en el futuro el conector a base de datos externa (Supabase / PostgreSQL / Redis)
+            # Conector futuro a base de datos externa (Supabase / PostgreSQL / Redis)
             print(f"☁️ [Cloud DB Sync] Evento registrado en la nube: [{event_type}] {details}")
             return True
 
-        # Modo fallback local / contenedor efímero
+        # Modo fallback local / contenedor efímero con ruta absoluta
         try:
             os.makedirs(os.path.dirname(self.memory_file), exist_ok=True)
             
@@ -48,4 +51,4 @@ class ContextManager:
 if __name__ == "__main__":
     # Prueba rápida del gestor de contexto
     cm = ContextManager()
-    cm.log_event("SYSTEM_TEST", "Verificando persistencia del administrador de contexto.")
+    cm.log_event("SYSTEM_TEST", "Verificando persistencia y rutas absolutas del administrador de contexto.")
