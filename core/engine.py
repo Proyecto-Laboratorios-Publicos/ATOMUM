@@ -15,18 +15,18 @@ class AtomumEngine:
         self.guardrails = Guardrails()
         self.is_active = True
         
-        # Configuración orientada a Groq (Gratuito, hiperrápido y compatible con OpenAI)
+        # Configuración orientada a Groq con el modelo OSS activo en consola
         self.api_key = os.getenv("ATOMUM_LLM_API_KEY") or os.getenv("GROQ_API_KEY")
         self.api_endpoint = os.getenv("ATOMUM_LLM_ENDPOINT", "https://api.groq.com/openai/v1/chat/completions")
-        # Usamos Llama 3.3 de 70B, ideal para razonamiento y refactorización de código
-        self.model_name = os.getenv("ATOMUM_LLM_MODEL", "llama-3.3-70b-versatile")
+        # Usamos el modelo activo en tu Playground actual
+        self.model_name = os.getenv("ATOMUM_LLM_MODEL", "openai/gpt-oss-120b")
         
-        print("🧠 [Engine] Núcleo de razonamiento de Atomum inicializado para Groq.")
+        print("🧠 [Engine] Núcleo de razonamiento de Atomum inicializado para Groq (OSS).")
 
     def process_instruction(self, instruction: str):
         """
         Procesa la directiva del operador aplicando filtros constitucionales
-        y realizando la consulta al motor cognitivo ultrarrápido de Groq.
+        y realizando la consulta al motor cognitivo de Groq.
         """
         if not instruction or not isinstance(instruction, str):
             print("⚠️ [Engine] Directiva vacía o inválida recibida.")
