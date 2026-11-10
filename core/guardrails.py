@@ -1,43 +1,81 @@
 import os
-import re
+import sys
+import requests
 
-class Guardrails:
-    def __init__(self, constitution_path="CONSTITUTION.md"):
-        self.constitution_path = constitution_path
-        self.forbidden_patterns = [
-            r"rm\s+-rf\s+/",         # Borrado masivo de sistemas
-            r"DROP\s+DATABASE",      # Destrucción de bases de datos
-            r"git\s+push.*--force",  # Pisar producción sin control
-            r"chmod\s+777\s+/",      # Modificación masiva de permisos críticos
-        ]
+# Asegurar rutas absolutas exactas para el núcleo y evitar errores de importación
+current_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.dirname(current_dir)
+if root_dir not in sys.path:
+    sys.path.append(root_dir)
 
-    def validate_action(self, action_command: str) -> bool:
-        """
-        Analiza si un comando o acción viola los límites de seguridad
-        establecidos en la constitución del agente.
-        """
-        print(f"🔍 [Guardrails] Analizando acción: '{action_command}'")
+from core.guardrails import Guardrails
+
+class AtomumEngine:
+    def __init__(self):
+        self.guardrails = Guardrails()
+        self.is_active = True
         
-        # 1. Verificar si existe la constitución
-        if not os.path.exists(self.constitution_path):
-            print("❌ ALERTA ROJA: No se encuentra la CONSTITUTION.md. Bloqueando por defecto.")
-            return False
+        # Configuración orientada a Groq con el modelo OSS activo
+        self.api_key = os.getenv("ATOMUM_LLM_API_KEY") or os.getenv("GROQ_API_KEY")
+        self.api_endpoint = os.getenv("ATOMUM_LLM_ENDPOINT", "https://api.groq.com/openai/v1/chat/completions")
+        self.model_name = os.getenv("ATOMUM_LLM_MODEL", "openai/gpt-oss-120b")
+        
+        print("🧠 [Engine] Núcleo de razonamiento de Atomum inicializado para Groq.")
 
-        # 2. Comprobar patrones prohibidos de destrucción
-        for pattern in self.forbidden_patterns:
-            if re.search(pattern, action_command, re.IGNORECASE):
-                print(f"🚨 ACCIÓN BLOQUEADA: Coincide con patrón destructivo prohibido -> {pattern}")
-                return False
+    def process_instruction(self, instruction: str):
+        """
+        Procesa la directiva del operador aplicando filtros constitucionales
+        y realizando la consulta al motor cognitivo de Groq, retornando el contenido generado.
+        """
+        if not instruction or not isinstance(instruction, str):
+            return "⚠️ [Engine] Directiva vacía o inválida recibida."
 
-        print("✅ Acción aprobada por los filtros de seguridad.")
-        return True
+        cleaned_instruction = instruction.strip()
+        print(f"\n⚙️ [Engine] Procesando directiva: '{cleaned_instruction}'")
+
+        # 1. Validación estricta con la Constitución y los Guardarraíses
+        if not self.guardrails.validate_action(cleaned_instruction):
+            return "🚫 [Engine] Ejecución denegada por los guardarraíses de seguridad suprema."
+
+        # 2. Control de patrones destructivos
+        dangerous_patterns = ["rm -rf", "sudo", "shutdown", "mkfs", "dd if="]
+        if any(pattern in cleaned_instruction.lower() for pattern in dangerous_patterns):
+            return "🛡️ [Engine] Alerta de seguridad: Patrón destructivo bloqueado por el motor."
+
+        # 3. Conexión con la API Cognitiva de Groq
+        if self.api_key:
+            try:
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": self.model_name,
+                    "messages": [
+                        {
+                            "role": "system", 
+                            "content": "Actúas como el núcleo cognitivo autónomo de ATOMUM. Tu objetivo es procesar directivas lógicas, estructurar código y autogestionar actualizaciones bajo estrictos guardarraíses constitucionales."
+                        },
+                        {
+                            "role": "user", 
+                            "content": cleaned_instruction
+                        }
+                    ],
+                    "temperature": 0.2
+                }
+                
+                response = requests.post(self.api_endpoint, headers=headers, json=payload, timeout=25)
+                if response.status_code == 200:
+                    result_data = response.json()
+                    ai_response = result_data["choices"][0]["message"]["content"]
+                    return ai_response
+                else:
+                    return f"⚠️ [Engine] Error en la API de Groq (Código {response.status_code}): {response.text}"
+            except Exception as e:
+                return f"❌ [Engine] Fallo de conexión con el endpoint de Groq: {e}"
+        else:
+            return "🧠 [Engine] Modo Autónomo Local: Falta configurar ATOMUM_LLM_API_KEY en los secrets."
 
 if __name__ == "__main__":
-    # Prueba rápida de seguridad
-    guard = Guardrails()
-    test_cmd = "git status"
-    danger_cmd = "rm -rf /"
-    
-    print("--- Test de Seguridad ---")
-    guard.validate_action(test_cmd)
-    guard.validate_action(danger_cmd)
+    engine = AtomumEngine()
+    print(engine.process_instruction("estado del sistema"))
