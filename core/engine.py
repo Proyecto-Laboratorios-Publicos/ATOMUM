@@ -18,7 +18,7 @@ class AtomumEngine:
         # Configuración orientada a Groq con respaldo de variables de entorno
         self.api_key = os.getenv("ATOMUM_LLM_API_KEY") or os.getenv("GROQ_API_KEY")
         self.api_endpoint = os.getenv("ATOMUM_LLM_ENDPOINT", "https://api.groq.com/openai/v1/chat/completions")
-        self.model_name = os.getenv("ATOMUM_LLM_MODEL", "llama-3.1-8b-instant")
+        self. model_name = os. getenv ("ATOMUM_LLM_MODEL" , "openai/gpt-oss-120b" )
         
         print("🧠 [Engine] Núcleo de razonamiento de Atomum inicializado y blindado.")
 
