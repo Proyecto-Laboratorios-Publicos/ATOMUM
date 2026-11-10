@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-gitops_engine.py
-----------------
-Automatiza la creación de una rama y la apertura de un Pull Request en GitHub de forma segura,
-siguiendo la política GitOps de ATOMUM.
+gitops_engine.py - ATOMUM Core v1.0
+------------------------------------
+Automatiza la creación de ramas y Pull Requests respetando el GITHUB_WORKSPACE.
 """
 
 from __future__ import annotations
@@ -20,7 +19,6 @@ import requests
 from git import Repo, GitCommandError
 from dotenv import load_dotenv
 
-# Carga .env solo en entornos de development
 if Path(".env").exists():
     load_dotenv(".env")
 
@@ -29,54 +27,31 @@ REPO_URL: str = os.getenv("REPO_URL", "")
 BASE_BRANCH: str = os.getenv("BASE_BRANCH", "main")
 WORKDIR: Path = Path(os.getenv("WORKDIR", "/tmp/gitops_workdir")).resolve()
 
-# ----------------------------------------------------------------------
-#  NUEVO: obtención segura de la ruta a improvement.json en GitHub Actions
-# ----------------------------------------------------------------------
-import os
-from pathlib import Path
-
 def get_improvement_path() -> Path:
     """
-    Construye y devuelve la ruta absoluta al archivo ``improvement.json`` que
-    se encuentra en la raíz del workspace del runner de GitHub Actions.
-
-    La variable de entorno ``GITHUB_WORKSPACE`` es establecida por GitHub
-    Actions y apunta al directorio raíz del checkout del repositorio.
-    Si la variable no está definida (ej. ejecución local), se recurre a la
-    ubicación del proyecto como fallback.
-
-    Returns
-    -------
-    pathlib.Path
-        Ruta absoluta al archivo ``improvement.json``.
-
-    Raises
-    ------
-    FileNotFoundError
-        Si el archivo no existe en la ruta calculada.
+    Construye y devuelve la ruta absoluta al archivo improvement.json
+    priorizando GITHUB_WORKSPACE (GitHub Actions) o un fallback local.
     """
-    # 1️⃣  Intentamos obtener la raíz del workspace desde la variable de entorno.
     workspace = os.getenv("GITHUB_WORKSPACE")
     if workspace:
         root_dir = Path(workspace).resolve()
     else:
-        # Fallback para ejecuciones locales: usamos el directorio del proyecto.
-        # ``core`` está al mismo nivel que el archivo ``improvement.json``.
-        root_dir = Path(__file__).resolve().parents[1]   # …/core/ → proyecto raíz
-    # 2️⃣  Construimos la ruta completa al archivo.
+        # Fallback local: core está al mismo nivel que improvement.json
+        root_dir = Path(__file__).resolve().parents[1]
+    
     improvement_path = root_dir / "improvement.json"
-
-    # 3️⃣  Validamos su existencia de forma explícita para que el motor falle
-    #     con un mensaje claro y no con un traceback genérico.
     if not improvement_path.is_file():
-        raise FileNotFoundError(
-            f"⚠️  improvement.json no encontrado en '{improvement_path}'. "
-            "Comprueba que el archivo exista y que la variable GITHUB_WORKSPACE "
-            "apunte al directorio correcto."
-        )
-
+        raise FileNotFoundError(f"⚠️ improvement.json no encontrado en '{improvement_path}'.")
     return improvement_path
-# ----------------------------------------------------------------------
+
+# Asignamos la ruta global que consumirá load_improvement
+IMPROVEMENT_PATH: Path = get_improvement_path()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
 
 def log_struct(message: str, **kwargs: Any) -> None:
     payload = {"msg": message, **kwargs}
@@ -96,11 +71,15 @@ def load_improvement() -> Dict[str, Any]:
     if not IMPROVEMENT_PATH.is_file():
         raise FileNotFoundError(f"Improvement file not found: {IMPROVEMENT_PATH}")
     
-    data = json.loads(IMPROVEMENT_PATH.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(IMPROVEMENT_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"improvement.json contiene JSON inválido: {exc.msg}")
+
     required = {"ticket_id", "title", "description", "type"}
     missing = required - data.keys()
     if missing:
-        raise ValueError(f"Improvement JSON missing fields: {missing}")
+        raise ValueError(f"improvement.json no contiene los campos obligatorios: {missing}")
     
     data["ticket_id"] = str(data["ticket_id"]).strip()
     data["title"] = data["title"].strip()
@@ -114,7 +93,7 @@ def clone_repo(repo_url: str, dest: Path) -> Repo:
             repo.remotes.origin.fetch()
             return repo
         except Exception as e:
-            log_struct("Existing directory not a repo, removing", error=str(e))
+            log_struct("Existing directory not clean, re-cloning", error=str(e))
             for child in dest.iterdir():
                 if child.is_dir():
                     subprocess.run(["rm", "-rf", str(child)], check=False)
@@ -143,7 +122,6 @@ def create_and_push_branch(repo: Repo, branch_name: str, improvement: Dict[str, 
         else:
             raise
 
-    # Aplicar cambios menores (ej: CHANGELOG y VERSION)
     changelog_path = os.path.join(repo.working_tree_dir, "CHANGELOG.md")
     with open(changelog_path, "a", encoding="utf-8") as f:
         f.write(f"\n## [{improvement['title']}] - {improvement['ticket_id']}\n")
@@ -152,16 +130,19 @@ def create_and_push_branch(repo: Repo, branch_name: str, improvement: Dict[str, 
     version_file = Path(repo.working_tree_dir) / "VERSION"
     if version_file.is_file():
         current = version_file.read_text().strip()
-        major, minor, patch = map(int, current.split("."))
-        new_version = f"{major}.{minor + 1}.0"
+        parts = current.split(".")
+        major, minor, patch = int(parts[0]), int(parts[1]), int(parts[2]) if len(parts) > 2 else 0
+        new_version = f"{major}.{minor + 1}.{patch}"
         version_file.write_text(new_version + "\n")
     else:
         version_file.write_text("1.1.0\n")
-        new_version = "1.1.0"
 
     repo.index.add([changelog_path, str(version_file)])
     commit_msg = f"feat({improvement['type']}): {improvement['title']} [{improvement['ticket_id']}]"
-    repo.index.commit(commit_msg, author=repo.config_reader().get_value("user", "name", "atomum-bot"))
+    
+    author_name = repo.config_reader().get_value("user", "name", "atomum-bot")
+    author_email = repo.config_reader().get_value("user", "email", "bot@atomum.local")
+    repo.index.commit(commit_msg, author=f"{author_name} <{author_email}>")
 
     origin = repo.remote(name="origin")
     origin.push(refspec=f"{branch_name}:{branch_name}", force=True)
