@@ -38,15 +38,14 @@ if submitted and user_input:
     # Registrar evento de inicio en memoria
     memory.log_event("WEB_APP_INSTRUCTION", f"Instrucción recibida vía Streamlit: {user_input}")
     
-    # Procesar a través del motor
-    success = engine.process_instruction(user_input)
+    # Procesar a través del motor y capturar la respuesta generada
+    response_output = engine.process_instruction(user_input)
     
-    if success:
-        memory.log_event("WEB_APP_APPROVED", f"Instrucción aprobada: {user_input}")
-        st.success(f"✨ **Aprobado y ejecutado con éxito:** `{user_input}`")
-    else:
-        memory.log_event("WEB_APP_BLOCKED", f"Instrucción bloqueada: {user_input}")
-        st.error(f"🛡️ **Bloqueado por los guardarraíses constitucionales:** `{user_input}`")
+    # Mostrar la respuesta del motor/LLM directamente en pantalla
+    st.markdown("### 🧠 Respuesta del Núcleo Cognitivo")
+    st.markdown(response_output)
+    
+    memory.log_event("WEB_APP_PROCESSED", f"Instrucción procesada: {user_input}")
 
 st.markdown("---")
-st.markdown("🧬 *ATOMUM Core v1.0 | Operativo y Sincronizado*")
+st.markdown("🧬 *ATOMUM Core v1.0 | Operativo y Sincronizado con Groq*")
