@@ -23,8 +23,8 @@ def run_autonomous_cycle():
     memory = ContextManager()
     engine = AtomumEngine()
     git_op = GitOperations()
+    
     tasks_file = "tasks.json"
-
     if not os.path.exists(tasks_file):
         print(f"❌ [Error] No se encontró el archivo de tareas '{tasks_file}'.")
         return
@@ -51,24 +51,26 @@ def run_autonomous_cycle():
         memory.log_event("AUTONOMOUS_CYCLE_START", f"Evaluando tarea: '{task_desc}'")
 
         try:
-            # Blindaje de ejecución individual por tarea
-            success = engine.process_instruction(task_desc)
-            if success:
+            # Procesar instrucción a través del motor cognitivo
+            response_output = engine.process_instruction(task_desc)
+
+            # Verificar si fue bloqueada por los guardarraíses o seguridad
+            if "denegada" in response_output.lower() or "bloqueado" in response_output.lower():
+                memory.log_event("TASK_REJECTED", f"La tarea '{task_desc}' fue bloqueada por seguridad.")
+                item["status"] = "blocked"
+                print(f"🛡️ Ciclo #{cycle_count}: Amenaza neutralizada por guardarraíses.")
+            else:
                 memory.log_event("TASK_EXECUTED", f"La tarea '{task_desc}' fue aprobada y ejecutada.")
                 item["status"] = "completed"
                 print(f"✨ Ciclo #{cycle_count} completado con éxito.")
+                print(f"💬 Resultado:\n{response_output}\n")
 
                 # Lógica de auto-aprendizaje / auto-generación de ejemplo
                 if "git status" in task_desc and not any(t.get("task") == "git log -n 1" for t in task_queue):
                     add_dynamic_task(task_queue, "git log -n 1")
                     queue_modified = True
-            else:
-                memory.log_event("TASK_REJECTED", f"La tarea '{task_desc}' fue bloqueada por seguridad.")
-                item["status"] = "blocked"
-                print(f"🛡️ Ciclo #{cycle_count}: Amenaza neutralizada por guardarraíses.")
 
         except Exception as task_error:
-            # Control de fallos en extremidades o excepciones inesperadas
             error_msg = f"Fallo crítico ejecutando la tarea '{task_desc}': {task_error}"
             print(f"❌ [Autonomous Error] {error_msg}")
             memory.log_event("TASK_EXCEPTION", error_msg)
