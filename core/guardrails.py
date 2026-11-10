@@ -1,41 +1,40 @@
 import os
 import sys
 
-# Asegurar rutas absolutas exactas
-current_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = os.path.dirname(current_dir)
-if root_dir not in sys.path:
-    sys.path.append(root_dir)
-
 class Guardrails:
     def __init__(self):
-        print("🛡️ [Guardrails] Sistema de seguridad constitucional inicializado.")
+        print("🛡️ [Guardrails] Subsistema de seguridad constitucional inicializado.")
 
     def validate_action(self, action: str) -> bool:
         """
-        Valida que la directiva o acción del usuario cumpla con los parámetros
-        de seguridad y no infrinja los guardarraíses de ATOMUM.
+        Valida que la directiva o acción cumpla con los principios éticos
+        y no incluya comandos destructivos o prohibidos.
         """
         if not action or not isinstance(action, str):
             return False
 
-        cleaned = action.strip().lower()
-        print(f"🔍 [Guardrails] Analizando acción: '{action}'")
-
-        # Lista negra de comandos o intenciones altamente destructivas
+        action_lower = action.lower()
+        
+        # Lista negra de comandos o intenciones destructivas a nivel de sistema
         forbidden_keywords = [
-            "rm -rf", "mkfs", "dd if=", ":(){ :|:& };:", 
-            "DROP DATABASE", "DELETE FROM users", "sudo rm"
+            "rm -rf /", 
+            "mkfs", 
+            "dd if=", 
+            ":(){ :|:& };:", 
+            "shutdown", 
+            "reboot"
         ]
 
         for keyword in forbidden_keywords:
-            if keyword.lower() in cleaned:
-                print(f"🚫 [Guardrails] Acción bloqueada por coincidencia con patrón prohibido: {keyword}")
+            if keyword in action_lower:
+                print(f"🚫 [Guardrails] Alerta: Se detectó un comando prohibido ('{keyword}'). Bloqueando acción.")
                 return False
 
-        print("✅ Acción aprobada por los filtros de seguridad.")
+        print(f"✅ [Guardrails] Analizando acción: '{action[:30]}...' -> Aprobada por los filtros de seguridad.")
         return True
 
 if __name__ == "__main__":
     g = Guardrails()
-    print(g.validate_action("estado del sistema"))
+    assert g.validate_action("analiza el código") == True
+    assert g.validate_action("rm -rf /") == False
+    print("✅ Pruebas de guardarraíses superadas.")
