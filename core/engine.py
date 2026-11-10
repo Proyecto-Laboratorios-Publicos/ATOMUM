@@ -1,5 +1,6 @@
 import os
 import sys
+import asyncio
 
 # Asegurar rutas absolutas exactas antes de cualquier importación interna
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -8,6 +9,7 @@ if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
 from core.guardrails import Guardrails
+from core.http_client import AsyncHttpClient
 from groq import Groq
 
 class AtomumEngine:
@@ -17,7 +19,15 @@ class AtomumEngine:
         self.api_key = os.getenv("ATOMUM_LLM_API_KEY") or os.getenv("GROQ_API_KEY")
         self.model_name = os.getenv("ATOMUM_LLM_MODEL", "openai/gpt-oss-120b")
         
-        # Inicializar el cliente oficial de Groq si la API Key está disponible
+        # Instanciar el cliente HTTP asíncrono optimizado
+        self.http_client = AsyncHttpClient(
+            max_connections=100,
+            max_concurrency=50,
+            timeout=30.0,
+            retry_attempts=3
+        )
+        
+        # Inicializar el cliente oficial de Groq
         if self.api_key:
             try:
                 self.client = Groq(api_key=self.api_key)
@@ -69,6 +79,9 @@ class AtomumEngine:
                 return f"❌ [Engine] Fallo en la llamada al SDK de Groq: {e}"
         else:
             return "🧠 [Engine] Modo Autónomo Local: Falta configurar la API Key de Groq en los secretos de Streamlit."
+
+    async def close(self):
+        await self.http_client.close()
 
 if __name__ == "__main__":
     engine = AtomumEngine()
