@@ -1,0 +1,30 @@
+{
+  "improvement_id": "IM-001",
+  "audit_id": "AT-001",
+  "title": "Integración de CI/CD y GitOps para apertura automática de Pull Request",
+  "description": "Implementación de los workflows de GitHub Actions necesarios para ejecutar pruebas unitarias, análisis estático y despliegue continuo, así como la configuración del motor GitOps que genera automáticamente el primer Pull Request al detectar cambios en la rama de mejora.",
+  "author": "ATOMUM Bot",
+  "date": "2026-11-10",
+  "branch": "feature/ci-gitops-integration",
+  "commit_message": "Add CI workflow, static analysis, and GitOps PR automation",
+  "files_added": [
+    ".github/workflows/ci.yml",
+    ".github/workflows/pull_request.yml",
+    "scripts/gitops-open-pr.sh"
+  ],
+  "files_modified": [
+    "README.md",
+    "src/main.py"
+  ],
+  "pull_request": {
+    "title": "feat: Add CI/CD pipeline and GitOps PR automation",
+    "body": "This PR introduces:\n\n- A GitHub Actions workflow (`ci.yml`) that runs unit tests, linting (flake8), type checking (mypy) and code coverage on every push.\n- A second workflow (`pull_request.yml`) that triggers the GitOps engine to open a Pull Request when the `feature/ci-gitops-integration` branch is pushed.\n- Helper script `gitops-open-pr.sh` used by the GitOps engine to create the PR with the appropriate metadata.\n- Minor documentation updates in `README.md` describing the new CI/CD process.\n- Minor refactor in `src/main.py` to improve testability.\n\nThe GitOps engine will now automatically open the first PR against `main` once this branch is pushed, enabling a fully automated delivery pipeline.",
+    "base": "main",
+    "head": "feature/ci-gitops-integration"
+  },
+  "metadata": {
+    "status": "ready",
+    "priority": "high",
+    "tags": ["ci", "cd", "gitops", "automation", "github-actions"]
+  }
+}
