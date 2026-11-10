@@ -1,0 +1,43 @@
+name: Auto-Improvement GitOps
+
+on:
+  workflow_dispatch:
+    inputs:
+      improvement_file:
+        description: 'Path to improvement.json'
+        required: true
+        default: 'improvement.json'
+
+jobs:
+  gitops:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      REPO_URL: ${{ github.repositoryUrl }}
+      BASE_BRANCH: main
+      WORKDIR: /tmp/atomum_repo
+      IMPROVEMENT_FILE: ${{ github.event.inputs.improvement_file }}
+    steps:
+      - name: Checkout self
+        uses: actions/checkout@v4
+        with:
+          path: scripts
+          
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r scripts/requirements.txt
+          pip install GitPython requests python-dotenv pytest
+          
+      - name: Ejecutar GitOps Engine
+        run: |
+          python scripts/core/gitops_engine.py
