@@ -16,7 +16,6 @@ def main():
 
     engine = AtomumEngine()
     memory = ContextManager()
-
     memory.log_event("CLI_SESSION_START", "Sesión interactiva iniciada por el operador.")
 
     while True:
@@ -24,21 +23,22 @@ def main():
             user_input = input("ATOMUM> ").strip()
             if not user_input:
                 continue
-            
+
             if user_input.lower() in ["exit", "salir"]:
                 print("👋 Cerrando consola interactiva de Atomum. ¡Hasta luego, Totem!")
                 memory.log_event("CLI_SESSION_END", "Sesión interactiva finalizada.")
                 break
 
-            # Procesar instrucción a través del motor y guardarraíses
-            success = engine.process_instruction(user_input)
+            # Procesar instrucción a través del motor cognitivo
+            response_output = engine.process_instruction(user_input)
             
-            if success:
-                memory.log_event("CLI_INSTRUCTION_APPROVED", f"Instrucción ejecutada con éxito: {user_input}")
-                print("✨ Resultado: Aprobado y procesado correctamente.\n")
-            else:
+            # Verificar si fue bloqueado por los guardarraíses
+            if "denegada" in response_output or "bloqueado" in response_output:
                 memory.log_event("CLI_INSTRUCTION_BLOCKED", f"Instrucción bloqueada: {user_input}")
-                print("🛡️ Resultado: Bloqueado por los guardarraíses constitucionales.\n")
+                print(f"🛡️ {response_output}\n")
+            else:
+                memory.log_event("CLI_INSTRUCTION_APPROVED", f"Instrucción ejecutada con éxito: {user_input}")
+                print(f"✨ Respuesta del Núcleo:\n{response_output}\n")
 
         except KeyboardInterrupt:
             print("\n👋 Sesión interrumpida por el usuario.")
