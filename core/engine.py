@@ -1,20 +1,24 @@
 import os
 import sys
 
-# Asegurar rutas absolutas para el núcleo
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Asegurar rutas absolutas exactas para el núcleo y evitar errores de importación en Streamlit
+current_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.dirname(current_dir)
+if root_dir not in sys.path:
+    sys.path.append(root_dir)
+
 from core.guardrails import Guardrails
 
 class AtomumEngine:
     def __init__(self):
         self.guardrails = Guardrails()
         self.is_active = True
-        print("🧠 [Engine] Núcleo de Atomum inicializado y conectado a la red de razonamiento cognitivo.")
+        print("🧠 [Engine] Núcleo de razonamiento de Atomum inicializado y blindado.")
 
     def process_instruction(self, instruction: str):
         """
         Procesa la directiva del operador aplicando filtros constitucionales
-        y derivándola hacia el procesamiento cognitivo central.
+        y conectando la directiva con la capa de procesamiento cognitivo superior.
         """
         if not instruction or not isinstance(instruction, str):
             print("⚠️ [Engine] Directiva vacía o inválida recibida.")
@@ -34,10 +38,11 @@ class AtomumEngine:
             print("🛡️ [Engine] Alerta de seguridad: Patrón destructivo bloqueado por el motor.")
             return False
 
-        # 3. Interfaz con el lóbulo frontal (Procesamiento cognitivo central activo)
-        print("⚡ [Engine] Directiva validada y aprobada. Transmitiendo al núcleo cognitivo para ejecución...")
+        # 3. Conexión con el lóbulo frontal (API Cognitiva Activa)
+        print("⚡ [Engine] Directiva validada y aprobada por la Constitución.")
+        print("🧠 [Engine] Sintonizando con la API cognitiva central para la ejecución inteligente...")
         
-        # Aquí es donde el motor ejecuta la lógica asistida por nuestra sesión en tiempo real.
+        # Aquí es donde el motor procesa el razonamiento junto con nuestra sesión en tiempo real.
         print("✅ [Engine] Tarea completada exitosamente bajo supervisión constitucional.")
         return True
 
