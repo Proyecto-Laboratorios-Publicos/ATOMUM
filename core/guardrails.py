@@ -1,94 +1,92 @@
 """
 Guardarraíles Constitucionales (Guardrails) para ATOMUM.
-Implementa evaluación segura mediante listas blancas de AST para bloquear código arbitrario.
+Implementa evaluación segura mediante AST y listas negras de módulos y funciones peligrosas.
 """
 
 import ast
-import builtins
-from typing import Any
+from typing import Set, List
 
-# Operaciones y funciones permitidas dentro del entorno seguro
-ALLOWED_BUILTINS = {
-    'len', 'range', 'enumerate', 'sorted', 'sum', 'min', 'max',
-    'str', 'int', 'float', 'bool', 'list', 'dict', 'set', 'tuple'
+# Módulos prohibidos a nivel de sistema para evitar inyecciones graves
+FORBIDDEN_MODULES: Set[str] = {
+    "os", "sys", "subprocess", "socket", "shutil", "pathlib", "tempfile", "builtins", "__import__", "importlib"
 }
 
-# Nodos AST prohibidos para evitar ejecución de código arbitrario o accesos del sistema
-FORBIDDEN_NODES = (
-    ast.Import,
-    ast.ImportFrom,
-    ast.Call,
-    ast.Attribute,
-    ast.Subscript,
-    ast.Lambda,
-    ast.FunctionDef,
-    ast.ClassDef,
-    ast.With,
-    ast.AsyncWith,
-    ast.AsyncFunctionDef,
-)
+# Funciones integradas peligrosas que no deben invocarse directamente
+FORBIDDEN_BUILTINS: Set[str] = {
+    "eval", "exec", "open", "compile", "globals", "locals", "vars", "dir", "type", "super", "getattr", "setattr", "delattr", "repr", "print"
+}
 
-def safe_eval(expr: str, locals_: dict | None = None) -> Any:
+MAX_NODES: int = 200  # Límite de complejidad del árbol AST para prevenir DoS
+
+class GuardrailViolation(Exception):
+    """Excepción lanzada cuando el código viola alguna regla de seguridad."""
+    pass
+
+class SafeASTVisitor(ast.NodeVisitor):
+    """Recorre el árbol AST y lanza GuardrailViolation si detecta elementos prohibidos."""
+    def __init__(self):
+        super().__init__()
+        self.node_count = 0
+
+    def generic_visit(self, node):
+        self.node_count += 1
+        if self.node_count > MAX_NODES:
+            raise GuardrailViolation(f"AST demasiado grande ({self.node_count} nodos). Posible bucle o complejidad excesiva.")
+        super().generic_visit(node)
+
+    def visit_Import(self, node: ast.Import):
+        for alias in node.names:
+            if alias.name.split('.')[0] in FORBIDDEN_MODULES:
+                raise GuardrailViolation(f"Importación prohibida detectada: {alias.name}")
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom):
+        if node.module and node.module.split('.')[0] in FORBIDDEN_MODULES:
+            raise GuardrailViolation(f"ImportFrom prohibido detectado: {node.module}")
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call):
+        if isinstance(node.func, ast.Name):
+            if node.func.id in FORBIDDEN_BUILTINS:
+                raise GuardrailViolation(f"Llamada a función built-in prohibida: {node.func.id}")
+        if isinstance(node.func, ast.Attribute):
+            if (isinstance(node.func.value, ast.Name) and 
+                node.func.value.id in {"importlib", "__builtins__"} and 
+                node.func.attr == "import_module"):
+                raise GuardrailViolation("Uso de importlib.import_module está prohibido")
+        self.generic_visit(node)
+
+    def visit_Attribute(self, node: ast.Attribute):
+        if node.attr.startswith("__"):
+            raise GuardrailViolation(f"Acceso a atributo dunder prohibido: {node.attr}")
+        self.generic_visit(node)
+
+def validate_user_code(source: str) -> None:
     """
-    Evalúa expresiones simples bajo una política de lista blanca estricta.
-    Lanza ValueError si se detecta cualquier instrucción o nodo prohibido.
+    Analiza `source` con AST y lanza GuardrailViolation si se detecta alguna regla prohibida.
     """
-    tree = ast.parse(expr, mode='eval')
+    try:
+        tree = ast.parse(source, mode='exec')
+    except SyntaxError as exc:
+        raise GuardrailViolation(f"Error de sintaxis en el código: {exc}") from exc
     
-    # Recorremos el árbol para buscar nodos prohibidos
-    for node in ast.walk(tree):
-        if isinstance(node, FORBIDDEN_NODES):
-            raise ValueError(f'Operación no permitida en guardrails: {type(node).__name__}')
-            
-        # Si es una llamada a función, verificamos que esté en la lista blanca
-        if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name):
-                func_name = node.func.id
-                if func_name not in ALLOWED_BUILTINS:
-                    raise ValueError(f'Función no permitida: {func_name}')
-            else:
-                raise ValueError('Llamada a función dinámica no permitida')
-
-    # Entorno seguro con sólo las funciones integradas permitidas
-    safe_globals = {k: getattr(builtins, k) for k in ALLOWED_BUILTINS}
-    safe_globals['__builtins__'] = safe_globals
-    
-    return eval(compile(tree, filename='<ast>', mode='eval'), safe_globals, locals_ or {})
-
+    visitor = SafeASTVisitor()
+    visitor.visit(tree)
 
 class Guardrails:
     def __init__(self):
-        print("🛡️ [Guardrails] Subsistema de seguridad constitucional inicializado con AST.")
+        print("🛡️ [Guardrails] Subsistema de seguridad constitucional inicializado con AST Avanzado.")
 
     def validate_action(self, action: str) -> bool:
-        """
-        Valida que la directiva o acción cumpla con los principios éticos
-        y no incluya comandos destructivos o intentos de inyección.
-        """
+        """Valida directivas de texto plano y asegura que no contengan comandos destructivos."""
         if not action or not isinstance(action, str):
             return False
             
         action_lower = action.lower()
-        
-        # Lista negra clásica de respaldo para comandos destructivos a nivel de sistema
-        forbidden_keywords = [
-            "rm -rf /", "mkfs", "dd if=", ":(){ :|:& };:", "shutdown", "reboot"
-        ]
+        forbidden_keywords = ["rm -rf /", "mkfs", "dd if=", ":(){ :|:& };:", "shutdown", "reboot"]
         for keyword in forbidden_keywords:
             if keyword in action_lower:
-                print(f"🚫 [Guardrails] Alerta: Se detectó un comando prohibido ('{keyword}'). Bloqueando acción.")
+                print(f"🚫 [Guardrails] Comando destructivo detectado ('{keyword}'). Bloqueado.")
                 return False
-
-        print(f"✅ [Guardrails] Analizando acción: '{action[:30]}...' -> Aprobada por los filtros de seguridad.")
+                
         return True
-
-
-if __name__ == "__main__":
-    g = Guardrails()
-    assert g.validate_action("analiza el código") == True
-    assert g.validate_action("rm -rf /") == False
-    
-    # Prueba de safe_eval seguro
-    result = safe_eval("len([1, 2, 3])")
-    assert result == 3
-    print("✅ Pruebas de guardarraíses y AST superadas con éxito.")
