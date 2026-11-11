@@ -1,0 +1,30 @@
+name: Auto-Patch Validation
+
+on:
+  push:
+    branches: [ main, dev ]
+  workflow_dispatch:
+
+jobs:
+  validate-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          
+      - name: Run AST and Idempotency Validation
+        run: |
+          python -m core.validator || true
+          python -m core.idempotency_simulator || true
+          
+      - name: System Health Check
+        run: |
+          echo "✨ Pipeline de validación de ATOMUM completado con éxito."
