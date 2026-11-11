@@ -29,26 +29,27 @@ WORKDIR: Path = Path(os.getenv("WORKDIR", "/tmp/gitops_workdir")).resolve()
 
 def get_improvement_path() -> Path:
     """
-    Construye y devuelve la ruta absoluta al archivo improvement.json
-    buscándolo de forma inteligente en el workspace de GitHub Actions o la raíz local.
+    Busca y devuelve la ruta absoluta al archivo improvement.json de forma robusta.
+    Orden de resolución:
+    1. $GITHUB_WORKSPACE/improvement.json (si la variable está definida)
+    2. Directorio raíz del proyecto respecto a la ubicación del script
     """
-    # 1. Si GitHub Actions define el workspace, lo usamos de forma directa
     workspace = os.getenv("GITHUB_WORKSPACE")
+    candidates = []
+    
     if workspace:
-        candidate = Path(workspace) / "improvement.json"
-        if candidate.is_file():
-            return candidate
+        candidates.append(Path(workspace) / "improvement.json")
+    
+    # Ruta relativa basada en la ubicación de este archivo (core/gitops_engine.py -> sube un nivel)
+    module_root = Path(__file__).resolve().parent.parent
+    candidates.append(module_root / "improvement.json")
+    candidates.append(Path(os.getcwd()) / "improvement.json")
 
-    # 2. Si estamos corriendo localmente o el workspace apunta a otro lado, 
-    # buscamos desde la ubicación actual del script subiendo niveles hasta hallar el archivo.
-    current_dir = Path(__file__).resolve().parent
-    for parent in [current_dir] + list(current_dir.parents):
-        candidate = parent / "improvement.json"
-        if candidate.is_file():
-            return candidate
-
-    # 3. Fallback final apuntando al directorio actual de ejecución
-    return Path(os.getcwd()) / "improvement.json"
+    for p in candidates:
+        if p.is_file():
+            return p.resolve()
+            
+    raise FileNotFoundError(f"No se encontró 'improvement.json'. Rutas probadas: {', '.join(str(p) for p in candidates)}")
 
 # Asignamos la ruta global que consumirá load_improvement
 IMPROVEMENT_PATH: Path = get_improvement_path()
