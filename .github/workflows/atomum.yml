@@ -32,14 +32,13 @@ jobs:
         # No se cambia el working-directory → sigue en la raíz
 
       # 4️⃣  **Ejecutar el motor** – forzamos el working-directory a la raíz
-      - name: Run GitOps engine
-        # Si tu script está en `src/engine/main.py` usa la ruta completa,
-        # pero mantén el working-directory en la raíz para que los archivos
-        # relativos (improvement.json, .git, etc.) se encuentren.
-        working-directory: ${{ github.workspace }}
+      - name: Ejecutar GitOps Engine
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          REPO_URL: ${{ secrets.REPO_URL }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
         run: |
-          # Si el entry‑point está en un sub‑directorio:
-          python src/engine/main.py  # <-- ajusta según tu estructura
+          python core/gitops_engine.py
         # Si el entry‑point ya está en la raíz:
         #   run: python engine.py
 
