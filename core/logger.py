@@ -4,40 +4,40 @@ Filtra y enmascara automáticamente los secretos antes de emitirlos en consola.
 """
 
 import logging
-import sys
-from config.settings import settings
+import re
+from logging.handlers import RotatingFileHandler
+from typing import Final
 
-class SecretFilter(logging.Filter):
-    """
-    Elimina cualquier cadena que coincida con los valores secretos
-    de la configuración antes de que el registro sea emitido.
-    """
+# Patrón robusto para detectar claves, tokens y contraseñas dinámicas
+SENSITIVE_PATTERN: Final[re.Pattern] = re.compile(
+    r'(?i)(password|secret|api[_-]?key|token)\s*=\s*["\']?([^"\',\s]+)["\']?'
+)
+
+class SecretMaskFilter(logging.Filter):
+    """Reemplaza cualquier coincidencia de datos sensibles por ***."""
     def filter(self, record: logging.LogRecord) -> bool:
-        # Extraer secretos de forma segura desde los campos SecretStr de Pydantic
-        secret_values = []
-        if hasattr(settings, 'GROQ_API_KEY') and settings.GROQ_API_KEY:
-            secret_values.append(settings.GROQ_API_KEY.get_secret_value())
-        
-        message = record.getMessage()
-        for secret in secret_values:
-            if secret and secret in message:
-                record.msg = message.replace(secret, '[REDACTED]')
+        if isinstance(record.msg, str):
+            record.msg = SENSITIVE_PATTERN.sub(r'\1=***', record.msg)
         return True
 
-def configure_logging() -> None:
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG if getattr(settings, 'DEBUG_MODE', False) else logging.INFO)
+def get_logger(name: str = "app") -> logging.Logger:
+    logger = logging.getLogger(name)
+    if logger.handlers:
+        return logger
+        
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter(
+        fmt="%(asctime)s %(levelname)s %(name)s %(threadName)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
     
-    # Evitar duplicidad de handlers si ya están configurados
-    if not logger.handlers:
-        handler = logging.StreamHandler(sys.stdout)
-        formatter = logging.Formatter(
-            fmt='%(asctime)s | %(levelname)s | %(name)s | %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        handler.setFormatter(formatter)
-        handler.addFilter(SecretFilter())
-        logger.addHandler(handler)
+    # Console handler
+    console = logging.StreamHandler()
+    console.setFormatter(formatter)
+    console.addFilter(SecretMaskFilter())
+    logger.addHandler(console)
+    
+    return logger
 
-# Inicializar logger al importar el módulo
-configure_logging()
+# Instancia global por defecto
+logger = get_logger("atomum")
