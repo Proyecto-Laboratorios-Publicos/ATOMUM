@@ -1,15 +1,16 @@
 """
 Configuración centralizada y segura de ATOMUM utilizando Pydantic.
-Protege credenciales mediante SecretStr y valida variables de entorno.
+Permite un inicio degradado seguro si faltan credenciales externas.
 """
 
 import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, SecretStr, field_validator
+from typing import Optional
 
 class Settings(BaseSettings):
-    # Claves sensibles protegidas con SecretStr para evitar exposición en logs
-    GROQ_API_KEY: SecretStr = Field(..., description="Clave de API oficial para el motor Groq")
+    # Claves sensibles protegidas con SecretStr, ahora opcionales para evitar bloqueos en el arranque
+    GROQ_API_KEY: Optional[SecretStr] = Field(default=None, description="Clave de API oficial para el motor Groq")
     MODEL_NAME: str = Field(default="llama-3.3-70b-versatile", description="Modelo LLM predeterminado")
     
     # Parámetros operativos del núcleo
