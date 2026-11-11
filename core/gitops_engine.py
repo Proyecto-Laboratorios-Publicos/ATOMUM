@@ -68,18 +68,15 @@ def _project_root() -> Path:
 
 def load_improvement() -> Dict[str, Any]:
     """
-    Carga improvement.json usando la variable oficial de GitHub Actions o la ruta actual del workspace.
+    Carga improvement.json directamente desde la raíz del workspace de GitHub Actions.
     """
-    workspace = os.getenv("GITHUB_WORKSPACE")
-    if workspace:
-        file_path = Path(workspace) / "improvement.json"
-    else:
-        file_path = Path(os.getcwd()) / "improvement.json"
-
+    workspace = os.getenv("GITHUB_WORKSPACE", os.getcwd())
+    file_path = Path(workspace) / "improvement.json"
+    
     log.info(f"Cargando improvement.json desde: {file_path}")
 
     if not file_path.is_file():
-        raise FileNotFoundError(f"No se encontró improvement.json en la ruta esperada: {file_path}")
+        raise FileNotFoundError(f"No se encontró improvement.json en: {file_path}")
     
     try:
         data = json.loads(file_path.read_text(encoding="utf-8"))
