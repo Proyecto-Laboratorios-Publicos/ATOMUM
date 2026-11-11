@@ -27,38 +27,13 @@ REPO_URL: str = os.getenv("REPO_URL", "")
 BASE_BRANCH: str = os.getenv("BASE_BRANCH", "main")
 WORKDIR: Path = Path(os.getenv("WORKDIR", "/tmp/gitops_workdir")).resolve()
 
-def get_improvement_path() -> Path:
-    """
-    Busca y devuelve la ruta absoluta al archivo improvement.json de forma robusta.
-    Orden de resolución:
-    1. $GITHUB_WORKSPACE/improvement.json (si la variable está definida)
-    2. Directorio raíz del proyecto respecto a la ubicación del script
-    """
-    workspace = os.getenv("GITHUB_WORKSPACE")
-    candidates = []
-    
-    if workspace:
-        candidates.append(Path(workspace) / "improvement.json")
-    
-    # Ruta relativa basada en la ubicación de este archivo (core/gitops_engine.py -> sube un nivel)
-    module_root = Path(__file__).resolve().parent.parent
-    candidates.append(module_root / "improvement.json")
-    candidates.append(Path(os.getcwd()) / "improvement.json")
-
-    for p in candidates:
-        if p.is_file():
-            return p.resolve()
-            
-    raise FileNotFoundError(f"No se encontró 'improvement.json'. Rutas probadas: {', '.join(str(p) for p in candidates)}")
-
-# Asignamos la ruta global que consumirá load_improvement
-IMPROVEMENT_PATH: Path = get_improvement_path()
-
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(message)s',
     handlers=[logging.StreamHandler(sys.stdout)]
 )
+
+log = logging.getLogger(__name__)
 
 def log_struct(message: str, **kwargs: Any) -> None:
     payload = {"msg": message, **kwargs}
@@ -71,17 +46,42 @@ def get_github_headers() -> Dict[str, str]:
         "X-GitHub-Api-Version": "2022-11-28"
     }
 
+def _project_root() -> Path:
+    """
+    Devuelve la ruta absoluta al directorio raíz del repositorio de forma robusta.
+    1. Primero intenta con la variable de entorno GITHUB_WORKSPACE (CI).
+    2. Si no está, busca el archivo improvement.json subiendo directorios desde la ubicación del script.
+    """
+    gh_workspace = os.getenv("GITHUB_WORKSPACE")
+    if gh_workspace:
+        return Path(gh_workspace).resolve()
+    
+    cur = Path(__file__).resolve()
+    for parent in [cur] + list(cur.parents):
+        if (parent / "improvement.json").exists():
+            return parent
+            
+    raise FileNotFoundError(
+        "No se pudo determinar la raíz del proyecto. "
+        "Asegúrate de ejecutar desde el directorio del repo o define GITHUB_WORKSPACE."
+    )
+
 def load_improvement() -> Dict[str, Any]:
     """
-    Lee y parsea improvement.json resolviendo la ruta de forma dinámica.
+    Carga `improvement.json` de forma segura usando rutas absolutas.
     """
-    improvement_path = get_improvement_path()
+    root = _project_root()
+    file_path = root / "improvement.json"
+    log.debug("Cargando improvement.json desde %s", file_path)
     
-    if not improvement_path.is_file():
-        raise FileNotFoundError(f"Improvement file not found at: {improvement_path}")
+    if not file_path.is_file():
+        raise FileNotFoundError(
+            f"improvement.json no está en la raíz del proyecto ({root}). "
+            "Comprueba que el archivo exista y que el workflow no cambie el working-directory."
+        )
     
     try:
-        data = json.loads(improvement_path.read_text(encoding="utf-8"))
+        data = json.loads(file_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ValueError(f"improvement.json contiene JSON inválido: {exc.msg}")
 
