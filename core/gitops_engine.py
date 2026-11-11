@@ -68,17 +68,18 @@ def _project_root() -> Path:
 
 def load_improvement() -> Dict[str, Any]:
     """
-    Carga `improvement.json` de forma segura usando rutas absolutas.
+    Carga improvement.json usando la variable oficial de GitHub Actions o la ruta actual del workspace.
     """
-    root = _project_root()
-    file_path = root / "improvement.json"
-    log.debug("Cargando improvement.json desde %s", file_path)
-    
+    workspace = os.getenv("GITHUB_WORKSPACE")
+    if workspace:
+        file_path = Path(workspace) / "improvement.json"
+    else:
+        file_path = Path(os.getcwd()) / "improvement.json"
+
+    log.info(f"Cargando improvement.json desde: {file_path}")
+
     if not file_path.is_file():
-        raise FileNotFoundError(
-            f"improvement.json no está en la raíz del proyecto ({root}). "
-            "Comprueba que el archivo exista y que el workflow no cambie el working-directory."
-        )
+        raise FileNotFoundError(f"No se encontró improvement.json en la ruta esperada: {file_path}")
     
     try:
         data = json.loads(file_path.read_text(encoding="utf-8"))
