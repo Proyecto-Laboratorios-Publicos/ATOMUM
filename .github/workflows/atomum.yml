@@ -1,0 +1,51 @@
+name: CI – GitOps Engine
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  run-engine:
+    runs-on: ubuntu-latest
+
+    # 1️⃣  Checkout *toda* la rama (no shallow)
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # <-- necesario si el engine usa git history
+          # path: .                # <-- opcional, por claridad
+
+      # 2️⃣  Configurar Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # 3️⃣  Instalar dependencias (requirements.txt en la raíz)
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+        # No se cambia el working-directory → sigue en la raíz
+
+      # 4️⃣  **Ejecutar el motor** – forzamos el working-directory a la raíz
+      - name: Run GitOps engine
+        # Si tu script está en `src/engine/main.py` usa la ruta completa,
+        # pero mantén el working-directory en la raíz para que los archivos
+        # relativos (improvement.json, .git, etc.) se encuentren.
+        working-directory: ${{ github.workspace }}
+        run: |
+          # Si el entry‑point está en un sub‑directorio:
+          python src/engine/main.py  # <-- ajusta según tu estructura
+        # Si el entry‑point ya está en la raíz:
+        #   run: python engine.py
+
+      # 5️⃣  (Opcional) Guardar artefactos de diagnóstico
+      - name: Debug – list workspace
+        if: failure()
+        run: |
+          echo "=== ${{ github.workspace }} ==="
+          ls -R ${{ github.workspace }}
