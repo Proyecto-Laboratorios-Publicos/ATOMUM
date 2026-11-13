@@ -8,7 +8,9 @@ import sys
 import asyncio
 import logging
 import multiprocessing
+import logging
 from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(current_dir)
@@ -122,3 +124,91 @@ class AtomumEngine:
 
     async def close(self):
         await self.http_client.close()
+
+
+
+
+log = logging.getLogger(__name__)
+
+# Umbrales de severidad que disparan alerta
+ALERT_SEVERITIES = {"CRITICAL", "HIGH"}
+
+def _flatten_findings(report: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Convierte la estructura anidada del JSON (p.ej. por archivo) en una lista plana.
+    Se asume que el formato del analyzer sigue la convención:
+    {
+        "results": [
+            {
+                "file": "src/module.py",
+                "issues": [
+                    {"id": "S001", "title": "...", "severity": "CRITICAL", ...},
+                    ...
+                ]
+            },
+            ...
+        ]
+    }
+    """
+    flat = []
+    for entry in report.get("results", []):
+        file_path = entry.get("file", "")
+        for issue in entry.get("issues", []):
+            issue_copy = issue.copy()
+            issue_copy["file"] = file_path
+            flat.append(issue_copy)
+    return flat
+
+
+def process_security_report(report: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Analiza el JSON del escáner y devuelve una lista de hallazgos que superan
+    los umbrales definidos (CRITICAL / HIGH). Además, envía los datos al motor
+    cognitivo de Groq (si está configurado) para enriquecer la información.
+
+    Returns
+    -------
+    alerts : list[dict]
+        Cada dict contiene al menos: id, title, severity, file, line (si disponible)
+    """
+    flat_findings = _flatten_findings(report)
+
+    alerts = [f for f in flat_findings if f.get("severity") in ALERT_SEVERITIES]
+
+    # ------------------------------------------------------------------
+    # Integración opcional con Groq (cognitivo) – se ejecuta solo si la
+    # variable de entorno GROQ_API_KEY está presente.
+    # ------------------------------------------------------------------
+    import os
+    groq_key = os.getenv("GROQ_API_KEY")
+    if groq_key and alerts:
+        try:
+            from groq import Groq  # pip install groq
+            client = Groq(api_key=groq_key)
+
+            # Construir prompt que describa los hallazgos críticos
+            prompt = "You are a security analyst. For each of the following findings, provide a concise remediation recommendation (max 2 sentences).\n\n"
+            for i, a in enumerate(alerts, 1):
+                prompt += f"{i}. [{a['severity']}] {a['id']} in {a['file']}: {a['title']}\n"
+
+            response = client.chat.completions.create(
+                model="mixtral-8x7b-32768",  # ejemplo de modelo Groq
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
+                max_tokens=1024,
+            )
+            # Parsear la respuesta (asumimos una lista numerada)
+            recommendations = response.choices[0].message.content.strip().splitlines()
+            for rec, alert in zip(recommendations, alerts):
+                alert["remediation"] = rec.partition(".")[2].strip()
+        except Exception as e:
+            log.warning(f"Integración con Groq falló: {e}")
+
+    # ------------------------------------------------------------------
+    # Registro de alertas en el motor interno (p.ej. base de datos, eventos)
+    # ------------------------------------------------------------------
+    # Aquí se podría insertar en una tabla `security_events` o publicar en un
+    # bus de eventos (Kafka, RabbitMQ). Se deja como placeholder.
+    # ------------------------------------------------------------------
+
+    return alerts
