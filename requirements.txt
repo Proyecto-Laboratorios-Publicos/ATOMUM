@@ -7,3 +7,5 @@ aiohttp>=3.9.0
 aiohttp-retry>=2.8.3
 python-dotenv
 pydantic-settings
+python-docx==0.8.11
+markdown2==2.4.8
