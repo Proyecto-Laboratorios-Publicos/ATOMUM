@@ -6,7 +6,6 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from core.engine import AtomumEngine
 from memory.context_manager import ContextManager
-from streamlit_monitor import render_response  # <--- Importamos la función de renderizado con exportación DOCX
 
 # -----------------------------------------------------------------
 # Estilos CSS - Cyberpunk Minimalista
@@ -92,20 +91,20 @@ with st.form("command_form"):
     user_input = st.text_input("Ingresá tu instrucción o comando técnico:", placeholder="Ej: genera un esquema en Python...")
     submitted = st.form_submit_button("Ejecutar Directiva ⚡")
 
-    if submitted and user_input:
-        with st.spinner("🧠 Procesando directiva a través del motor cognitivo..."):
-            # Registrar evento de inicio en memoria
-            memory.log_event("WEB_APP_INSTRUCTION", f"Instrucción recibida: {user_input}")
-            
-            # Procesar a través del motor de Atomum/Groq
-            response_output = engine.process_instruction(user_input)
-            
-            # Guardar en session_state para mantener la respuesta visible tras clics de descarga
-            st.session_state["last_response"] = response_output
-            st.session_state["last_input"] = user_input
-            
-            # Registrar evento de procesamiento exitoso
-            memory.log_event("WEB_APP_PROCESSED", f"Instrucción procesada correctamente: {user_input}")
+if submitted and user_input:
+    with st.spinner("🧠 Procesando directiva a través del motor cognitivo..."):
+        # Registrar evento de inicio en memoria
+        memory.log_event("WEB_APP_INSTRUCTION", f"Instrucción recibida: {user_input}")
+        
+        # Procesar a través del motor de Atomum/Groq
+        response_output = engine.process_instruction(user_input)
+        
+        # Guardar en session_state para mantener la respuesta visible tras clics
+        st.session_state["last_response"] = response_output
+        st.session_state["last_input"] = user_input
+        
+        # Registrar evento de procesamiento exitoso
+        memory.log_event("WEB_APP_PROCESSED", f"Instrucción procesada correctamente: {user_input}")
 
 # Renderizar de forma persistente la última respuesta si existe en la sesión
 if "last_response" in st.session_state:
@@ -115,8 +114,7 @@ if "last_response" in st.session_state:
     </div>
     """, unsafe_allow_html=True)
     
-    # Renderizar el contenido y habilitar la generación/descarga del documento DOCX
-    render_response(st.session_state["last_response"], as_markdown=True)
+    st.markdown(st.session_state["last_response"])
 
 st.markdown("---")
 st.markdown("🧬 *ATOMUM Core v1.0 | Operativo y Sincronizado con Groq*")
