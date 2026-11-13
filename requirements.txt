@@ -9,3 +9,5 @@ python-dotenv
 pydantic-settings
 python-docx==0.8.11
 markdown2==2.4.8
+beautifulsoup4==4.12.2
+lxml==4.9.3
