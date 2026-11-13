@@ -1,14 +1,48 @@
 """
 streamlit_monitor.py
 --------------------
-Dashboard interactivo en Streamlit para monitorear el bucle autónomo
-y visualizar el estado de las optimizaciones de ATOMUM.
+Dashboard interactivo en Streamlit para monitorear el bucle autónomo y visualizar el estado de las optimizaciones de ATOMUM.
 """
-
 import streamlit as st
 import subprocess
 import json
 from pathlib import Path
+import datetime
+from utils.exporter import export_to_docx
+
+def render_response(response, as_markdown=True):
+    """Renderiza la respuesta del núcleo cognitivo y habilita la generación y descarga en formato Word (.docx)."""
+    if isinstance(response, dict):
+        st.json(response)
+        markdown_body = response.get("markdown", "")
+    else:
+        markdown_body = response
+        if as_markdown:
+            st.markdown(markdown_body, unsafe_allow_html=True)
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    tmp_dir = Path("tmp_exports")
+    tmp_dir.mkdir(exist_ok=True)
+    docx_path = tmp_dir / f"informe_{timestamp}.docx"
+
+    if st.button("🔽 Generar informe DOCX"):
+        export_to_docx(
+            source=response,
+            output_path=docx_path,
+            title="Informe ATOMUM - Cyber-Sentinel",
+            author="Lucas",
+            markdown=as_markdown,
+        )
+        st.success("✅ Informe generado correctamente.")
+
+    if docx_path.exists():
+        with open(docx_path, "rb") as f:
+            st.download_button(
+                label="📥 Descargar informe DOCX",
+                data=f,
+                file_name=docx_path.name,
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
 
 st.set_page_config(
     page_title="ATOMUM - Dashboard de Auto-Mejora",
@@ -47,7 +81,6 @@ with col2:
 # Sección de registros históricos
 st.markdown("---")
 st.subheader("📜 Registro de Actividad Reciente")
-
 db_path = Path("memory/atomum_memory.db")
 if db_path.exists():
     st.info("Conectado al almacén SQLite persistente (`memory/atomum_memory.db`).")
