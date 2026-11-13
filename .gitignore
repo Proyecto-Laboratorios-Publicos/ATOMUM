@@ -43,5 +43,5 @@ Thumbs.db
 *.log
 *.sqlite3
 
-# Añadir la carpeta temporal de exportaciones para evitar subir archivos binarios residuales a GitHub:
+# Carpeta temporal para exportación de informes DOCX
 tmp_exports/
