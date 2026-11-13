@@ -11,7 +11,7 @@ from typing import Optional
 class Settings(BaseSettings):
     # Claves sensibles protegidas con SecretStr, ahora opcionales para evitar bloqueos en el arranque
     GROQ_API_KEY: Optional[SecretStr] = Field(default=None, description="Clave de API oficial para el motor Groq")
-    MODEL_NAME: str = Field(default="llama-3.3-70b-versatile", description="Modelo LLM predeterminado")
+    MODEL_NAME: str = Field(default="openai/gpt-oss-120b", description="Modelo LLM predeterminado")
     
     # Parámetros operativos del núcleo
     DEBUG_MODE: bool = Field(default=False, description="Activa el modo de registro extendido")
