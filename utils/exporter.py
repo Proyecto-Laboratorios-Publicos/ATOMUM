@@ -30,19 +30,23 @@ def _add_paragraph(doc: Document, text: str):
 
 
 def _add_table(doc: Document, headers: List[str], rows: List[List[Any]]):
-    """Crea tabla con estilo básico."""
-    table = doc.add_table(rows=1, cols=len(headers))
+    """Crea tabla con manejo seguro de celdas para evitar desbordamientos."""
+    cols = len(headers)
+    table = doc.add_table(rows=1, cols=cols)
     table.style = "Table Grid"
 
     hdr_cells = table.rows[0].cells
     for i, header in enumerate(headers):
-        hdr_cells[i].text = str(header)
-        hdr_cells[i].paragraphs[0].runs[0].font.bold = True
+        if i < len(hdr_cells):
+            hdr_cells[i].text = str(header)
+            if hdr_cells[i].paragraphs and hdr_cells[i].paragraphs[0].runs:
+                hdr_cells[i].paragraphs[0].runs[0].font.bold = True
 
     for row in rows:
         row_cells = table.add_row().cells
         for i, cell in enumerate(row):
-            row_cells[i].text = str(cell)
+            if i < len(row_cells):
+                row_cells[i].text = str(cell)
 
 
 def _process_markdown(doc: Document, md_text: str):
