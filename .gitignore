@@ -42,3 +42,6 @@ Thumbs.db
 # Logs y bases de datos locales opcionales
 *.log
 *.sqlite3
+
+# Añadir la carpeta temporal de exportaciones para evitar subir archivos binarios residuales a GitHub:
+tmp_exports/
