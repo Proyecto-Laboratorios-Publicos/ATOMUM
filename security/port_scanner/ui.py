@@ -84,7 +84,6 @@ def render_port_scanner_tab():
 
         def handle_close(res):
             closed_count[0] += 1
-            # Actualizar barra de progreso de forma segura
             progress_val = min(1.0, closed_count[0] / total_ports)
             progress_bar.progress(progress_val)
             status_text.text(f"Analizando puertos... Progreso: {closed_count[0]}/{total_ports}")
@@ -134,7 +133,6 @@ def render_port_scanner_tab():
                 })
                 st.dataframe(df_results, use_container_width=True)
 
-                # Botón de exportación de reporte
                 csv_data = df_results.to_csv(index=False).encode('utf-8')
                 st.download_button(
                     label="📥 Descargar Reporte de Escaneo (CSV)",
