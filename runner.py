@@ -45,13 +45,31 @@ class AutonomousRunner:
         self.model_id = os.getenv("ATOMUM_LLM_MODEL", "openai/gpt-oss-120b")
 
     @staticmethod
-    def _extract_json_block(raw_text: str) -> dict:
-        """Extrae y parsea el bloque JSON de la respuesta del LLM."""
-        cleaned = raw_text.strip()
-        match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", cleaned, re.DOTALL)
-        if match:
-            cleaned = match.group(1)
-        return json.loads(cleaned)
+    def _parse_proposal_response(raw_text: str, target_file: str, default_goal: str) -> dict:
+        """Extrae título, resumen y bloque de código Python sin depender de JSON anidado."""
+        title_match = re.search(r"^TITLE:\s*(.+)$", raw_text, re.MULTILINE)
+        summary_match = re.search(r"^SUMMARY:\s*(.+)$", raw_text, re.MULTILINE)
+        code_match = re.search(r"```python\s*(.*?)\s*```", raw_text, re.DOTALL)
+
+        if not code_match:
+            code_match = re.search(r"```\s*(.*?)\s*```", raw_text, re.DOTALL)
+
+        if not code_match:
+            raise ValueError("No se encontró un bloque ```python ... ``` en la respuesta del modelo.")
+
+        title = (
+            title_match.group(1).strip()
+            if title_match
+            else f"chore(atomum): mejora autónoma en {target_file}"
+        )
+        summary = summary_match.group(1).strip() if summary_match else default_goal
+        updated_code = code_match.group(1).strip() + "\n"
+
+        return {
+            "title": title,
+            "summary": summary,
+            "updated_code": updated_code,
+        }
 
     async def propose_improvement(
         self,
@@ -74,10 +92,13 @@ class AutonomousRunner:
 
         system_prompt = (
             "Eres el núcleo de ingeniería autónoma de ATOMUM. "
-            "Debes analizar el archivo Python proporcionado y devolver EXCLUSIVAMENTE un objeto JSON válido "
-            "con las claves exactas: "
-            '{"title": "título corto del PR", "summary": "explicación técnica", "updated_code": "código completo actualizado"}. '
-            "Reglas estrictas: mantén total retrocompatibilidad, no inventes dependencias externas y asegúrate de que el código compile."
+            "Analiza el archivo Python y responde ESTRICTAMENTE con el siguiente formato (sin JSON):\n"
+            "TITLE: <título corto y descriptivo del cambio>\n"
+            "SUMMARY: <explicación técnica en una sola línea>\n"
+            "```python\n"
+            "<código Python completo y actualizado>\n"
+            "```\n"
+            "Reglas: mantén 100% de retrocompatibilidad, no inventes dependencias externas y entrega el archivo completo."
         )
         user_prompt = (
             f"Objetivo de mejora: {goal}\n"
@@ -108,15 +129,15 @@ class AutonomousRunner:
         )
 
         try:
-            proposal = self._extract_json_block(raw_content)
+            proposal = self._parse_proposal_response(raw_content, target_file, goal)
             updated_code = proposal["updated_code"]
-            pr_title = proposal.get("title", f"chore(atomum): mejora autónoma en {target_file}")
-            pr_summary = proposal.get("summary", goal)
+            pr_title = proposal["title"]
+            pr_summary = proposal["summary"]
         except Exception as exc:
             return {
                 "status": "error",
-                "message": f"La respuesta del modelo no tuvo un JSON estructural válido: {exc}",
-                "raw_preview": raw_content[:400],
+                "message": f"No se pudo extraer la propuesta de código: {exc}",
+                "raw_preview": raw_content[:500],
             }
 
         # 1. Validación estricta de sintaxis AST antes de escribir
@@ -134,7 +155,6 @@ class AutonomousRunner:
 
         test_output = self.system.execute_safe_command("pytest tests/unit -q", timeout_sec=30)
         if "failed" in test_output.lower() or "error" in test_output.lower():
-            # Rollback inmediato si falla algún test
             self.files.write_text_file(target_file, original_code)
             return {
                 "status": "reverted",
