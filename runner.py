@@ -2,8 +2,6 @@
 runner.py
 ---------
 Orquestador principal del ciclo de auto-mejora autónoma de ATOMUM.
-Integra el núcleo modular (InferenceService, ContextService), validación AST,
-pruebas unitarias y apertura segura de Pull Requests en GitHub.
 """
 
 import ast
@@ -46,7 +44,6 @@ class AutonomousRunner:
 
     @staticmethod
     def _parse_proposal_response(raw_text: str, target_file: str, default_goal: str) -> dict:
-        """Extrae título, resumen y bloque de código Python sin depender de JSON anidado."""
         title_match = re.search(r"^TITLE:\s*(.+)$", raw_text, re.MULTILINE)
         summary_match = re.search(r"^SUMMARY:\s*(.+)$", raw_text, re.MULTILINE)
         code_match = re.search(r"```python\s*(.*?)\s*```", raw_text, re.DOTALL)
@@ -65,11 +62,7 @@ class AutonomousRunner:
         summary = summary_match.group(1).strip() if summary_match else default_goal
         updated_code = code_match.group(1).strip() + "\n"
 
-        return {
-            "title": title,
-            "summary": summary,
-            "updated_code": updated_code,
-        }
+        return {"title": title, "summary": summary, "updated_code": updated_code}
 
     async def propose_improvement(
         self,
@@ -77,7 +70,6 @@ class AutonomousRunner:
         goal: str = "Optimizar manejo de errores, tipado estático y docstrings sin romper compatibilidad.",
         open_pr: bool = True,
     ) -> dict:
-        """Ejecuta un ciclo completo de análisis, validación AST/pytest y Pull Request."""
         logger.info(f"🚀 [Runner] Iniciando ciclo de auto-mejora sobre '{target_file}'...")
         await self.context.set(
             "last_runner_cycle",
@@ -92,18 +84,18 @@ class AutonomousRunner:
 
         system_prompt = (
             "Eres el núcleo de ingeniería autónoma de ATOMUM. "
-            "Analiza el archivo Python y responde ESTRICTAMENTE con el siguiente formato (sin JSON):\n"
-            "TITLE: <título corto y descriptivo del cambio>\n"
-            "SUMMARY: <explicación técnica en una sola línea>\n"
+            "Analiza el archivo Python y responde ESTRICTAMENTE con este formato:\n"
+            "TITLE: <título corto>\n"
+            "SUMMARY: <resumen técnico en una línea>\n"
             "```python\n"
-            "<código Python completo y actualizado>\n"
+            "<código Python completo>\n"
             "```\n"
-            "Reglas: mantén 100% de retrocompatibilidad, no inventes dependencias externas y entrega el archivo completo."
+            "Mantén 100% de retrocompatibilidad y entrega el archivo completo."
         )
         user_prompt = (
-            f"Objetivo de mejora: {goal}\n"
-            f"Contexto de tareas (tasks.json): {json.dumps(tasks_data, ensure_ascii=False)[:1500]}\n"
-            f"Archivo objetivo: {target_file}\n\n"
+            f"Objetivo: {goal}\n"
+            f"Tareas: {json.dumps(tasks_data, ensure_ascii=False)[:1500]}\n"
+            f"Archivo: {target_file}\n\n"
             f"Código actual:\n```python\n{original_code}\n```"
         )
 
@@ -136,11 +128,10 @@ class AutonomousRunner:
         except Exception as exc:
             return {
                 "status": "error",
-                "message": f"No se pudo extraer la propuesta de código: {exc}",
+                "message": f"No se pudo extraer la propuesta: {exc}",
                 "raw_preview": raw_content[:500],
             }
 
-        # 1. Validación estricta de sintaxis AST antes de escribir
         try:
             ast.parse(updated_code)
         except SyntaxError as syn_err:
@@ -149,16 +140,15 @@ class AutonomousRunner:
         if updated_code.strip() == original_code.strip():
             return {"status": "noop", "message": "El núcleo determinó que no se requieren cambios."}
 
-        # 2. Aplicar cambio temporalmente y ejecutar suite de tests unitarios
         if not self.files.write_text_file(target_file, updated_code):
-            return {"status": "blocked", "message": f"Escritura bloqueada por guardarraíles en '{target_file}'."}
+            return {"status": "blocked", "message": f"Escritura bloqueada en '{target_file}'."}
 
         test_output = self.system.execute_safe_command("pytest tests/unit -q", timeout_sec=30)
         if "failed" in test_output.lower() or "error" in test_output.lower():
             self.files.write_text_file(target_file, original_code)
             return {
                 "status": "reverted",
-                "message": "Los tests unitarios fallaron tras aplicar el parche. Cambios revertidos.",
+                "message": "Los tests unitarios fallaron. Cambios revertidos.",
                 "test_output": test_output,
             }
 
@@ -170,7 +160,6 @@ class AutonomousRunner:
                 "test_output": test_output,
             }
 
-        # 3. Crear rama de propuesta, commitear, pushear y abrir PR en GitHub
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         branch_name = f"atomum/proposal-{stamp}"
 
@@ -210,7 +199,6 @@ class AutonomousRunner:
         }
 
     def run_cycle(self):
-        """Punto de entrada síncrono compatible con CLI y cron jobs."""
         result = asyncio.run(self.propose_improvement())
         logger.info(f"✨ [Runner] Resultado del ciclo: {result}")
         return result
