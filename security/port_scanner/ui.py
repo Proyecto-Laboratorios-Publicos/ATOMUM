@@ -226,16 +226,20 @@ def render_port_scanner_tab() -> None:
             ai_report_content = st.session_state.get("scanner_last_ai_report", "")
 
             if st.button("📝 Generar Informe Ejecutivo con IA (Groq)"):
-                with st.spinner("🤖 Analizando superficie de ataque y redactando informe..."):
+                with st.spinner("🤖 Analizando superficie de ataque y redactando informe técnico detallado..."):
                     prompt_ai = (
-                        f"Actúa como un consultor senior de ciberseguridad. Analiza los siguientes puertos abiertos "
-                        f"detectados en el objetivo {last_target}:\n"
+                        f"Actúa como un Arquitecto Senior de Ciberseguridad y Pentester. Analiza en profundidad los siguientes "
+                        f"puertos abiertos y banners detectados en el objetivo {last_target}:\n"
                         f"{df.to_string(index=False)}\n\n"
-                        "Redacta un Informe Ejecutivo de Seguridad claro y profesional siguiendo estas reglas ESTRICTAS de formato:\n"
-                        "1. NO utilices tablas Markdown (nada de barras '|').\n"
+                        "Redacta un Informe Técnico y Ejecutivo de Auditoría EXHAUSTIVO y DETALLADO siguiendo estas reglas ESTRICTAS de formato:\n"
+                        "1. NO utilices tablas Markdown (nada de barras '|') ni emojis complejos.\n"
                         "2. Utiliza secciones numeradas claras y listas con viñetas simples ('-').\n"
-                        "3. Evita símbolos especiales o emojis complejos; usa texto limpio y directo.\n"
-                        "4. Incluye: Resumen Ejecutivo, Análisis de Riesgos por Puerto, Recomendaciones Técnicas de Hardening y Plan de Acción Priorizado."
+                        "3. Sé sumamente detallado y técnico en cada sección, evitando resúmenes superficiales. Desarrolla:\n"
+                        "   - 1. Resumen Ejecutivo e Impacto de Negocio (evaluación global de exposición y riesgos normativos como ISO 27001 / PCI-DSS).\n"
+                        "   - 2. Análisis Técnico Profundo por Puerto y Banner (versiones exactas, CVEs asociados, vectores de explotación paso a paso e impacto real).\n"
+                        "   - 3. Guía Técnica de Hardening y Remediación (incluye parámetros exactos de configuración, archivos a modificar y comandos específicos de mitigación en Linux/Firewall).\n"
+                        "   - 4. Estrategia de Detección y Monitoreo (qué logs revisar, reglas de alerta o indicadores de compromiso).\n"
+                        "   - 5. Hoja de Ruta y Plan de Acción Priorizado (corto, mediano y largo plazo con responsables sugeridos)."
                     )
                     ai_report_content = call_groq_api(prompt_ai)
                     st.session_state["scanner_last_ai_report"] = ai_report_content
