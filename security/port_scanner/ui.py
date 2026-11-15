@@ -413,5 +413,59 @@ def render_port_scanner_tab() -> None:
                     )
                 except ImportError:
                     st.warning("⚠️ La librería `fpdf2` no está disponible en el entorno.")
+            elif export_format == "HTML Interactivo (.html)":
+                try:
+                    # Estructura del HTML autocontenido con diseño Dark Mode profesional
+                    html_content = f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte de Auditoría ATOMUM: {last_target}</title>
+    <style>
+        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d1117; color: #c9d1d9; margin: 0; padding: 20px; }}
+        .container {{ max-width: 900px; margin: auto; background: #161b22; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }}
+        h1 {{ color: #58a6ff; border-bottom: 2px solid #30363d; padding-bottom: 10px; }}
+        h2 {{ color: #8ab4f8; margin-top: 30px; border-bottom: 1px solid #30363d; padding-bottom: 5px; }}
+        .meta {{ background: #21262d; padding: 15px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; border-left: 4px solid #58a6ff; }}
+        .port-item {{ background: #21262d; padding: 10px 15px; margin: 8px 0; border-radius: 6px; border: 1px solid #30363d; }}
+        .ai-content {{ line-height: 1.6; white-space: pre-wrap; font-size: 14px; background: #0d1117; padding: 20px; border-radius: 6px; border: 1px solid #30363d; }}
+        .footer {{ margin-top: 40px; text-align: center; font-size: 12px; color: #8b949e; border-top: 1px solid #30363d; padding-top: 15px; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Reporte de Auditoría ATOMUM: {last_target}</h1>
+        <div class="meta">
+            <strong>Fecha de ejecución:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br>
+            <strong>Tiempo de escaneo:</strong> {elapsed:.2f} segundos
+        </div>
+        
+        <h2>Puertos Abiertos y Hallazgos</h2>
+"""
+                    for r in results:
+                        clean_risk = r['Riesgo'].replace('🔴 ', '[ALTO] ').replace('🟡 ', '[MEDIO] ').replace('🟢 ', '[BAJO] ')
+                        html_content += f"""        <div class="port-item">
+            <strong>Puerto:</strong> {r['Puerto']} | <strong>Estado:</strong> {r['Estado']} | <strong>Servicio:</strong> {r['Servicio']} | <strong>SO:</strong> {r['SO Estimado']} | <strong>Riesgo:</strong> {clean_risk} | <strong>Versión:</strong> {r['Banner / Versión']}
+        </div>\n"""
+
+                    if ai_report_content:
+                        html_content += """        <h2>Informe Ejecutivo y Hardening (Groq AI)</h2>
+        <div class="ai-content">""" + ai_report_content + """</div>\n"""
+
+                    html_content += f"""        <div class="footer">
+            ATOMUM Modular Core v2.0 | Motor Activo: Groq Cloud Engine
+        </div>
+    </div>
+</body>
+</html>"""
+
+                    st.download_button(
+                        label="⬇️ Descargar Reporte en HTML (.html)",
+                        data=html_content.encode('utf-8'),
+                        file_name=f"atomum_audit_{last_target}.html",
+                        mime="text/html"
+                    )
+                except Exception as e:
+                    st.error(f"⚠️ Error generando el reporte HTML: {e}")
         else:
             st.info("🛡️ No se detectaron puertos abiertos en el rango seleccionado para este objetivo.")
