@@ -1,4 +1,5 @@
-# security/port_scanner/__init__.py
-from .ui import render_port_scanner_tab
-from .core import PortScanner
-from .utils import validate_target, parse_port_range
+# security/__init__.py
+"""Paquete principal de seguridad y auditoría de ATOMUM."""
+from . import port_scanner
+
+__all__ = ["port_scanner"]
