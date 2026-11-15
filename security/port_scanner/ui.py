@@ -228,9 +228,14 @@ def render_port_scanner_tab() -> None:
             if st.button("📝 Generar Informe Ejecutivo con IA (Groq)"):
                 with st.spinner("🤖 Analizando superficie de ataque y redactando informe..."):
                     prompt_ai = (
-                        f"Analiza los siguientes puertos abiertos detectados en el objetivo {last_target}:\n"
-                        f"{df.to_string(index=False)}\n"
-                        "Proporciona recomendaciones técnicas de hardening y mitigación de riesgos."
+                        f"Actúa como un consultor senior de ciberseguridad. Analiza los siguientes puertos abiertos "
+                        f"detectados en el objetivo {last_target}:\n"
+                        f"{df.to_string(index=False)}\n\n"
+                        "Redacta un Informe Ejecutivo de Seguridad claro y profesional siguiendo estas reglas ESTRICTAS de formato:\n"
+                        "1. NO utilices tablas Markdown (nada de barras '|').\n"
+                        "2. Utiliza secciones numeradas claras y listas con viñetas simples ('-').\n"
+                        "3. Evita símbolos especiales o emojis complejos; usa texto limpio y directo.\n"
+                        "4. Incluye: Resumen Ejecutivo, Análisis de Riesgos por Puerto, Recomendaciones Técnicas de Hardening y Plan de Acción Priorizado."
                     )
                     ai_report_content = call_groq_api(prompt_ai)
                     st.session_state["scanner_last_ai_report"] = ai_report_content
