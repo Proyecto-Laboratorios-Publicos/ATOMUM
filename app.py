@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from atomum.context.service import ContextService
 from atomum.inference.service import InferenceService
 from atomum.inference.stub_inference import StubInferenceClient
-from atomum.planning.planner import Planner
+from atomum.planning.planner import CognitivePlanner
 
 # -----------------------------------------------------------------
 # Estilos CSS - Cyberpunk Minimalista
@@ -106,7 +106,7 @@ def load_atomum_modular_core():
     else:
         inference_engine = InferenceService(client=StubInferenceClient())
         mode = "Local Stub Engine"
-    planner = Planner()
+    planner = CognitivePlanner(inference_engine=inference_engine)
     return inference_engine, context_svc, planner, mode
 
 
