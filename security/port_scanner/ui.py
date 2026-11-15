@@ -21,10 +21,14 @@ except ImportError:
             return "⚠️ `GROQ_API_KEY` no configurada. No se puede generar el informe con IA."
         try:
             from groq import Groq
+            from config.settings import settings
             client = Groq(api_key=api_key)
+            # Usar el modelo configurado en el sistema en lugar de uno hardcodeado ajeno
+            target_model = os.getenv("ATOMUM_LLM_MODEL", getattr(settings, "MODEL_NAME", "llama3-70b-8192"))
             resp = client.chat.completions.create(
-                model=os.getenv("ATOMUM_LLM_MODEL", "llama-3.3-70b-versatile"),
+                model=target_model,
                 messages=[{"role": "user", "content": prompt}],
+                max_tokens=8192,  # <--- Margen extendido para evitar cortes
             )
             return resp.choices[0].message.content or "Sin respuesta del modelo."
         except Exception as exc:
