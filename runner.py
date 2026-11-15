@@ -46,14 +46,11 @@ class AutonomousRunner:
     def _parse_proposal_response(raw_text: str, target_file: str, default_goal: str) -> dict:
         title_match = re.search(r"^TITLE:\s*(.+)$", raw_text, re.MULTILINE)
         summary_match = re.search(r"^SUMMARY:\s*(.+)$", raw_text, re.MULTILINE)
-        
-        # Búsqueda flexible de bloques de código (admite saltos de línea previos)
-        code_match = re.search(r"```python\s*\n(.*?)\n\s*```", raw_text, re.DOTALL)
-        if not code_match:
-            code_match = re.search(r"```\s*\n(.*?)\n\s*```", raw_text, re.DOTALL)
 
-        if not code_match:
-            raise ValueError("No se encontró un bloque ```python ... ``` en la respuesta del modelo.")
+        # Extrae desde ```python (o ```) hasta el cierre ``` o fin de texto
+        code_match = re.search(r"```(?:python)?\s*\n(.*?)(?:\n\s*```|$)", raw_text, re.DOTALL)
+        if not code_match or not code_match.group(1).strip():
+            raise ValueError("No se encontró código Python válido en la respuesta del modelo.")
 
         title = (
             title_match.group(1).strip()
