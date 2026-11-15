@@ -301,12 +301,12 @@ def render_port_scanner_tab() -> None:
                         doc.add_heading("Informe Ejecutivo y Hardening (Groq AI)", level=1)
                         
                         for line_text in ai_report_content.split("\n"):
-                            # Si es una línea de tabla Markdown de la sección 5, la procesamos y formateamos en lugar de omitirla
+                            # Procesar filas de tabla Markdown (Sección 5) sin viñetas forzadas innecesarias
                             if line_text.strip().startswith("|"):
                                 parts = [p.strip() for p in line_text.split("|") if p.strip()]
                                 if len(parts) >= 4 and "Prioridad" not in parts[0] and "---" not in parts[0]:
-                                    row_str = f"• [{parts[0]}] {parts[1]} (Responsable: {parts[2]} | Plazo: {parts[3]})"
-                                    doc.add_paragraph(row_str)
+                                    row_str = f"[{parts[0]}] {parts[1]} (Responsable: {parts[2]} | Plazo: {parts[3]})"
+                                    doc.add_paragraph(row_str, style='List Bullet')
                                 continue
                             
                             cleaned_text = re.sub(r'[*#_`]', '', line_text)
@@ -370,11 +370,10 @@ def render_port_scanner_tab() -> None:
                         pdf.set_font("Arial", "", 8)
                         
                         for line_text in ai_report_content.split("\n"):
-                            # Procesar filas de tabla en el PDF sin perder información
                             if line_text.strip().startswith("|"):
                                 parts = [p.strip() for p in line_text.split("|") if p.strip()]
                                 if len(parts) >= 4 and "Prioridad" not in parts[0] and "---" not in parts[0]:
-                                    line_text = f"- [{parts[0]}] {parts[1]} (Resp: {parts[2]} | Plazo: {parts[3]})"
+                                    line_text = f"• [{parts[0]}] {parts[1]} (Resp: {parts[2]} | Plazo: {parts[3]})"
                                 else:
                                     continue
                             
