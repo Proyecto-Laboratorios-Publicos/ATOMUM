@@ -1,7 +1,7 @@
 # security/port_scanner/ui.py
 """
-Componente de interfaz visual para el Escáner de Puertos TCP de ATOMUM con Banner Grabbing,
-Correlación de CVEs, Modo Full Scan y Perfil Sigiloso/Lento.
+Interfaz visual avanzada para el Escáner de Puertos TCP de ATOMUM con Banner Grabbing,
+correlación de CVEs, criticidad por colores y Resumen Ejecutivo con IA (Groq).
 """
 import asyncio
 import streamlit as st
@@ -10,11 +10,12 @@ from datetime import datetime
 
 from security.port_scanner.core import PortScanner
 from security.port_scanner.utils import validate_target, parse_port_range
+from core.groq_client import call_groq_api
 
 def render_port_scanner_tab():
     st.subheader("🛡️ Escáner de Puertos, Banners & Auditoría de Vulnerabilidades")
     st.markdown(
-        "Herramienta avanzada de auditoría con escaneo asíncrono, banner grabbing y correlación de CVEs conocidos."
+        "Herramienta avanzada de auditoría con escaneo asíncrono, banner grabbing, criticidad y reporte ejecutivo por IA."
     )
 
     with st.form("port_scanner_form"):
@@ -40,7 +41,7 @@ def render_port_scanner_tab():
         stealth_mode = st.checkbox(
             "🥷 Modo Sigiloso / Lento (Evadir IDS / Rate Limiting)",
             value=False,
-            help="Reduce drásticamente la concurrencia y añade retrasos aleatorios. ¡ADVERTENCIA: Un Full Scan en este modo puede demorar varias horas!"
+            help="Reduce drásticamente la concurrencia y añade retrasos. ¡Un Full Scan puede demorar varios minutos!"
         )
 
         with st.expander("⚙️ Opciones Avanzadas de Rendimiento"):
@@ -68,9 +69,9 @@ def render_port_scanner_tab():
         if scan_all_ports:
             ports_list = list(range(1, 65536))
             if stealth_mode:
-                st.error("🚨 **¡MODO ANIMAL ACTIVADO!** Full Scan (65.535 puertos) bajo perfil **Sigiloso/Lento**. Prepará mate porque este proceso va a tomar **varias horas** para no quemar la IP.")
+                st.error("🚨 **¡MODO ANIMAL ACTIVADO!** Full Scan bajo perfil **Sigiloso/Lento**.")
             else:
-                st.warning("⚠️ **Modo Full Scan activado:** Se van a auditar los 65.535 puertos de forma masiva.")
+                st.warning("⚠️ **Modo Full Scan activado:** Auditando los 65.535 puertos de forma masiva.")
         else:
             try:
                 ports_list = parse_port_range(ports_input)
@@ -91,9 +92,16 @@ def render_port_scanner_tab():
         total_ports = len(ports_list)
 
         def handle_open(res):
-            host, port, is_open, banner, vulns = res
+            host, port, is_open, banner, service, vulns = res
             if is_open:
-                open_ports_data.append({"port": port, "banner": banner, "vulns": vulns})
+                severity = "🔴 CRÍTICO" if "CVE-" in vulns else ("🟡 ADVERTENCIA" if service != "Servicio Genérico / TCP" else "🟢 SEGURO")
+                open_ports_data.append({
+                    "port": port,
+                    "service": service,
+                    "banner": banner,
+                    "vulns": vulns,
+                    "severity": severity
+                })
 
         def handle_close(res):
             closed_count[0] += 1
@@ -130,24 +138,40 @@ def render_port_scanner_tab():
             m3.metric("Puertos Cerrados", total_ports - len(open_ports_data))
 
             if open_ports_data:
-                st.markdown("### ⚠️ Hallazgos, Banners & Vulnerabilidades (CVEs)")
+                st.markdown("### ⚠️ Hallazgos, Banners & Criticidad")
                 
                 open_ports_data = sorted(open_ports_data, key=lambda x: x["port"])
                 
                 df_results = pd.DataFrame({
                     "Puerto": [item["port"] for item in open_ports_data],
                     "Estado": ["Abierto"] * len(open_ports_data),
-                    "Servicio Sugerido": [
-                        "HTTP" if p["port"] in (80, 8080) else 
-                        "HTTPS" if p["port"] == 443 else 
-                        "SSH" if p["port"] == 22 else 
-                        "FTP" if p["port"] == 21 else "Desconocido" 
-                        for p in open_ports_data
-                    ],
+                    "Nivel de Riesgo": [item["severity"] for item in open_ports_data],
+                    "Servicio Detectado": [item["service"] for item in open_ports_data],
                     "Banner / Versión": [item["banner"] for item in open_ports_data],
                     "Vulnerabilidades Conocidas (CVEs)": [item["vulns"] for item in open_ports_data]
                 })
                 st.dataframe(df_results, use_container_width=True)
+
+                st.markdown("### 🤖 Generar Resumen Ejecutivo con IA (Groq)")
+                if st.button("📝 Redactar Informe de Auditoría con ATOMUM AI"):
+                    with st.spinner("🧠 Consultando al núcleo cognitivo de ATOMUM..."):
+                        findings_summary = "\n".join([
+                            f"- Puerto {item['port']} ({item['service']}) | Riesgo: {item['severity']} | Banner: {item['banner']} | CVEs: {item['vulns']}"
+                            for item in open_ports_data
+                        ])
+                        prompt = (
+                            f"Actúa como un Auditor Senior de Ciberseguridad. Analiza los siguientes hallazgos "
+                            f"del escaneo de red realizado al objetivo '{target_input}' ({resolved_or_error}):\n\n"
+                            f"{findings_summary}\n\n"
+                            "Redacta un resumen ejecutivo profesional y conciso dirigido a la gerencia técnica, "
+                            "destacando los vectores de riesgo críticos detectados, las versiones obsoletas de software "
+                            "y los pasos de remediación recomendados para mitigar las vulnerabilidades."
+                        )
+                        try:
+                            ai_report = call_groq_api(prompt)
+                            st.info(ai_report)
+                        except Exception as e:
+                            st.error(f"❌ Error al consultar la IA: {e}")
 
                 csv_data = df_results.to_csv(index=False).encode('utf-8')
                 st.download_button(
