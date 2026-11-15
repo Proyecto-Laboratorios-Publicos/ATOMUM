@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import socket
 import urllib.error
 import urllib.request
 from typing import Dict, List
@@ -34,3 +35,27 @@ def check_security_headers(url: str) -> Dict[str, bool]:
         # On any network error or malformed URL we simply return all False
         pass
     return result
+
+
+def scan_tcp_port(host: str, port: int, timeout: float = 1.0) -> bool:
+    """
+    Attempts to establish a TCP connection to ``host`` on ``port``.
+    Returns ``True`` if the connection succeeds (port is open), otherwise ``False``.
+    The socket is always closed via a ``finally`` block to guarantee resource cleanup.
+    """
+    sock: socket.socket | None = None
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        sock.connect((host, port))
+        return True
+    except socket.error:
+        # Connection failed – port is closed or host unreachable
+        return False
+    finally:
+        if sock is not None:
+            try:
+                sock.close()
+            except socket.error:
+                # Ignoring errors on close; nothing we can do
+                pass
