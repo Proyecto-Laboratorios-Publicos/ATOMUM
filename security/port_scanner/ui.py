@@ -279,21 +279,50 @@ def render_port_scanner_tab() -> None:
                 try:
                     from docx import Document
                     doc = Document()
+                    
+                    # Encabezado principal del documento
                     doc.add_heading(f"Reporte de Auditoría ATOMUM: {last_target}", 0)
                     doc.add_paragraph(f"Fecha de ejecución: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                     doc.add_paragraph(f"Tiempo de escaneo: {elapsed:.2f} segundos")
                     
                     doc.add_heading("Hallazgos de Puertos Abiertos", level=1)
                     for r in results:
+                        clean_risk = r['Riesgo'].replace('🔴 ', '[ALTO] ').replace('🟡 ', '[MEDIO] ').replace('🟢 ', '[BAJO] ')
                         doc.add_paragraph(
                             f"Puerto: {r['Puerto']} | Estado: {r['Estado']} | Servicio: {r['Servicio']} | "
-                            f"SO: {r['SO Estimado']} | Riesgo: {r['Riesgo']} | Versión: {r['Banner / Versión']}",
+                            f"SO: {r['SO Estimado']} | Riesgo: {clean_risk} | Versión: {r['Banner / Versión']}",
                             style='List Bullet'
                         )
                     
                     if ai_report_content:
                         doc.add_heading("Informe Ejecutivo y Hardening (Groq AI)", level=1)
-                        doc.add_paragraph(ai_report_content)
+                        
+                        # Procesar línea por línea el reporte de IA para darle formato limpio en Word
+                        for line_text in ai_report_content.split("\n"):
+                            if line_text.strip().startswith("|"):
+                                continue
+                            
+                            # Limpiar asteriscos y símbolos extraños
+                            cleaned_text = re.sub(r'[*#_`]', '', line_text)
+                            cleaned_text = (
+                                cleaned_text.replace('→', '->')
+                                .replace('–', '-')
+                                .replace('—', '-')
+                                .replace('•', '-')
+                                .replace('≥', '>=')
+                                .replace('‑', '-')
+                            )
+                            
+                            if not cleaned_text.strip():
+                                continue
+                            
+                            # Si detectamos que es un título numerado (ej: "1. Resumen Ejecutivo"), usar Heading nivel 2
+                            if any(cleaned_text.strip().startswith(prefix) for prefix in ["1.", "2.", "3.", "4.", "Conclusión"]):
+                                doc.add_heading(cleaned_text.strip(), level=2)
+                            elif cleaned_text.strip().startswith("-") or cleaned_text.strip().startswith("•"):
+                                doc.add_paragraph(cleaned_text.strip(), style='List Bullet')
+                            else:
+                                doc.add_paragraph(cleaned_text.strip())
                     
                     bio = io.BytesIO()
                     doc.save(bio)
