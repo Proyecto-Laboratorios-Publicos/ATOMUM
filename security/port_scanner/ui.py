@@ -2,7 +2,7 @@
 """
 Interfaz visual para el Escáner de Puertos TCP de ATOMUM con Banner Grabbing,
 resolución previa de DNS, correlación de CVEs, criticidad por colores, Resumen Ejecutivo con IA (Groq)
-y Exportación Multiformato (CSV, JSON, Word, PDF).
+y Exportación Multiformato (CSV, JSON, Word, PDF,HTML).
 """
 import asyncio
 import os
