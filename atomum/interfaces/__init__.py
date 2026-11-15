@@ -1,6 +1,5 @@
+from atomum.interfaces.inference import InferenceEngine
+from atomum.interfaces.context import ContextStore
+from atomum.interfaces.planning import PlanningService
 
-from .inference import InferenceEngine
-from .context import ContextStore
-from .planning import Planner
-
-__all__ = ["InferenceEngine", "ContextStore", "Planner"]
+__all__ = ["InferenceEngine", "ContextStore", "PlanningService"]
