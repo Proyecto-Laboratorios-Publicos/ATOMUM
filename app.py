@@ -122,7 +122,14 @@ async def execute_modular_pipeline(instruction: str) -> str:
 
     # 3. Ejecutar inferencia modular en formato messages
     result = await inference.run(
-        model_id="llama-3.3-70b-versatile",
+        model_id = (
+        os.getenv("ATOMUM_LLM_MODEL")
+        or st.secrets.get("ATOMUM_LLM_MODEL", "openai/gpt-oss-120b")
+    )
+
+    # 3. Ejecutar inferencia modular en formato messages
+    result = await inference.run(
+        model_id=model_id,
         payload={
             "messages": [
                 {
