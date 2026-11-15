@@ -1,6 +1,6 @@
 # security/port_scanner/ui.py
 """
-Componente de interfaz visual para el Escáner de Puertos TCP de ATOMUM con Banner Grabbing.
+Componente de interfaz visual para el Escáner de Puertos TCP de ATOMUM con Banner Grabbing y Vulnerabilidades.
 """
 import asyncio
 import streamlit as st
@@ -11,10 +11,9 @@ from security.port_scanner.core import PortScanner
 from security.port_scanner.utils import validate_target, parse_port_range
 
 def render_port_scanner_tab():
-    st.subheader("🛡️ Escáner de Puertos TCP & Banner Grabbing")
+    st.subheader("🛡️ Escáner de Puertos, Banners & Auditoría de Vulnerabilidades")
     st.markdown(
-        "Herramienta de auditoría de red con detección de puertos activos y captura de versiones (Banner Grabbing). "
-        "Protección anti-SSRF integrada."
+        "Herramienta avanzada de auditoría con escaneo asíncrono, banner grabbing y correlación de CVEs conocidos."
     )
 
     with st.form("port_scanner_form"):
@@ -35,7 +34,7 @@ def render_port_scanner_tab():
             concurrency = st.slider("Concurrencia simultánea", min_value=50, max_value=1000, value=300, step=50)
             timeout = st.slider("Timeout por puerto (segundos)", min_value=0.5, max_value=5.0, value=2.0, step=0.5)
 
-        submitted = st.form_submit_button("🚀 Iniciar Escaneo Avanzado")
+        submitted = st.form_submit_button("🚀 Iniciar Escaneo de Vulnerabilidades")
 
     if submitted:
         if not target_input:
@@ -68,15 +67,15 @@ def render_port_scanner_tab():
         total_ports = len(ports_list)
 
         def handle_open(res):
-            host, port, is_open, banner = res
+            host, port, is_open, banner, vulns = res
             if is_open:
-                open_ports_data.append({"port": port, "banner": banner})
+                open_ports_data.append({"port": port, "banner": banner, "vulns": vulns})
 
         def handle_close(res):
             closed_count[0] += 1
             progress_val = min(1.0, closed_count[0] / total_ports)
             progress_bar.progress(progress_val)
-            status_text.text(f"Analizando puertos y capturando banners... Progreso: {closed_count[0]}/{total_ports}")
+            status_text.text(f"Analizando puertos y correlacionando CVEs... Progreso: {closed_count[0]}/{total_ports}")
 
         scanner = PortScanner(
             concurrency=concurrency,
@@ -98,7 +97,7 @@ def render_port_scanner_tab():
         elapsed_time = (datetime.now() - start_time).total_seconds()
 
         with results_container:
-            st.success(f"✨ ¡Escaneo y Banner Grabbing completados en {elapsed_time:.2f} segundos!")
+            st.success(f"✨ ¡Escaneo y auditoría completados en {elapsed_time:.2f} segundos!")
 
             m1, m2, m3 = st.columns(3)
             m1.metric("Puertos Escaneados", total_ports)
@@ -106,9 +105,8 @@ def render_port_scanner_tab():
             m3.metric("Puertos Cerrados", total_ports - len(open_ports_data))
 
             if open_ports_data:
-                st.markdown("### 🔓 Puertos Abiertos & Banners Detectados")
+                st.markdown("### ⚠️ Hallazgos, Banners & Vulnerabilidades (CVEs)")
                 
-                # Ordenar por número de puerto
                 open_ports_data = sorted(open_ports_data, key=lambda x: x["port"])
                 
                 df_results = pd.DataFrame({
@@ -121,15 +119,16 @@ def render_port_scanner_tab():
                         "FTP" if p["port"] == 21 else "Desconocido" 
                         for p in open_ports_data
                     ],
-                    "Banner / Versión": [item["banner"] for item in open_ports_data]
+                    "Banner / Versión": [item["banner"] for item in open_ports_data],
+                    "Vulnerabilidades Conocidas (CVEs)": [item["vulns"] for item in open_ports_data]
                 })
                 st.dataframe(df_results, use_container_width=True)
 
                 csv_data = df_results.to_csv(index=False).encode('utf-8')
                 st.download_button(
-                    label="📥 Descargar Reporte Completo con Banners (CSV)",
+                    label="📥 Descargar Reporte de Seguridad Completo (CSV)",
                     data=csv_data,
-                    file_name=f"atomum_banner_scan_{target_input.replace('.', '_')}.csv",
+                    file_name=f"atomum_security_audit_{target_input.replace('.', '_')}.csv",
                     mime="text/csv",
                 )
             else:
