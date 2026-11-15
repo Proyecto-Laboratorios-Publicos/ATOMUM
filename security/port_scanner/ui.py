@@ -9,6 +9,7 @@ import os
 import socket
 import json
 import io
+import re
 from datetime import datetime
 import pandas as pd
 import streamlit as st
@@ -207,7 +208,6 @@ def render_port_scanner_tab() -> None:
         st.session_state["scanner_last_results"] = sorted(open_ports_data, key=lambda x: x["Puerto"])
         st.session_state["scanner_last_target"] = raw_target
         st.session_state["scanner_last_elapsed"] = elapsed
-        # Limpiar informe anterior al hacer un nuevo escaneo
         if "scanner_last_ai_report" in st.session_state:
             del st.session_state["scanner_last_ai_report"]
 
@@ -326,14 +326,29 @@ def render_port_scanner_tab() -> None:
                         pdf.cell(0, 10, "AI Security Recommendations:", ln=True)
                         pdf.set_font("Arial", "", 8)
                         
+                        # Limpiar formato Markdown para un PDF limpio y legible
                         for line_text in ai_report_content.split("\n"):
-                            safe_text = line_text.encode('latin-1', 'replace').decode('latin-1')
+                            # Omitir líneas de tablas Markdown puras (que empiezan con |)
+                            if line_text.strip().startswith("|"):
+                                continue
+                            
+                            # Limpiar asteriscos, numerales y flechas sobrantes
+                            cleaned_text = re.sub(r'[*#_`]', '', line_text)
+                            cleaned_text = cleaned_text.replace('→', '->')
+                            
+                            safe_text = cleaned_text.encode('latin-1', 'replace').decode('latin-1')
                             if not safe_text.strip():
                                 pdf.ln(3)
                                 continue
-                            pdf.multi_cell(190, 5, safe_text)
                             
-                    # Conversión limpia y directa de bytearray a bytes para Streamlit
+                            # Si parece un título (líneas cortas sin puntuación final), ponerlo en negrita visual
+                            if len(safe_text.strip()) < 60 and not safe_text.strip().endswith('.'):
+                                pdf.set_font("Arial", "B", 9)
+                                pdf.multi_cell(190, 5, safe_text.strip())
+                                pdf.set_font("Arial", "", 8)
+                            else:
+                                pdf.multi_cell(190, 5, safe_text)
+                            
                     pdf_output = bytes(pdf.output())
 
                     st.download_button(
