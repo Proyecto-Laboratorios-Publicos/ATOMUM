@@ -18,7 +18,7 @@ from atomum.planning.planner import CognitivePlanner
 from runner import AutonomousRunner
 from config.settings import settings
 
-# Importar el renderizador visual del subpaquete de escaneo de puertos de forma robusta
+# Importación robusta del escáner de puertos con manejo de excepciones detallado
 scanner_available = False
 render_port_scanner_tab = None
 
@@ -26,11 +26,8 @@ try:
     from security.port_scanner.ui import render_port_scanner_tab
     scanner_available = True
 except Exception as e:
-    # Capturamos cualquier error (ImportError, ModuleNotFoundError, etc.) para depurar
-    import traceback
-    import streamlit as st_inner
-    st_inner.error(f"⚠️ Error detallado al importar el escáner: {e}")
     scanner_available = False
+    import traceback
 
 # -----------------------------------------------------------------
 # Estilos CSS - Cyberpunk Minimalista
@@ -142,12 +139,9 @@ def load_atomum_modular_core():
 inference, context_store, planner, auto_runner, active_mode = load_atomum_modular_core()
 
 async def execute_modular_pipeline(instruction: str) -> str:
-    # 1. Registrar directiva entrante en ContextStore
     await context_store.set("last_instruction", {"prompt": instruction})
-    # 2. Generar plan de ejecución
     plan = await planner.create_plan(instruction, {"source": "streamlit_ui"})
     model_id = os.getenv("ATOMUM_LLM_MODEL", settings.MODEL_NAME)
-    # 3. Ejecutar inferencia modular en formato messages
     result = await inference.run(
         model_id=model_id,
         payload={
@@ -163,7 +157,6 @@ async def execute_modular_pipeline(instruction: str) -> str:
     )
     if result.get("status") == "error":
         return f"⚠️ Error del motor: {result.get('error_message')}"
-    # 4. Extraer respuesta limpia y persistir en contexto
     output = (
         result.get("output")
         or result.get("response")
@@ -288,5 +281,8 @@ with tab_scanner:
     if scanner_available and render_port_scanner_tab is not None:
         render_port_scanner_tab()
     else:
-        st.error("❌ El módulo visual del escáner de puertos no pudo inicializarse correctamente.")
-        st.info("💡 Consejo: Verificá que los archivos __init__.py estén presentes tanto en 'security/' como en 'security/port_scanner/'.")
+        st.error("❌ El módulo visual del escáner de puertos no pudo inicializarse.")
+        st.info("💡 Consejo: Asegurate de que los archivos `utils.py`, `core.py` y `ui.py` estén subidos dentro de la carpeta `security/port_scanner/` en GitHub.")
+
+st.markdown("---")
+st.markdown(f"🧬 *ATOMUM Modular Core v2.0 | Motor Activo: {active_mode}*")
