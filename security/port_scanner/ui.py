@@ -1,11 +1,14 @@
 # security/port_scanner/ui.py
 """
 Interfaz visual para el Escáner de Puertos TCP de ATOMUM con Banner Grabbing,
-resolución previa de DNS, correlación de CVEs, criticidad por colores y Resumen Ejecutivo con IA (Groq).
+resolución previa de DNS, correlación de CVEs, criticidad por colores, Resumen Ejecutivo con IA (Groq)
+y Exportación Multiformato (CSV, JSON, Word, PDF).
 """
 import asyncio
 import os
 import socket
+import json
+import io
 from datetime import datetime
 import pandas as pd
 import streamlit as st
@@ -41,7 +44,7 @@ def render_port_scanner_tab() -> None:
     st.subheader("🛡️ Escáner de Puertos, Banners & Auditoría de Vulnerabilidades")
     st.markdown(
         "Auditoría asíncrona TCP con resolución previa de DNS, banner grabbing en doble pasada, "
-        "clasificación de riesgo y análisis ejecutivo asistido por IA."
+        "clasificación de riesgo, análisis ejecutivo asistido por IA y exportación multiformato."
     )
 
     with st.form("port_scanner_form"):
@@ -204,6 +207,9 @@ def render_port_scanner_tab() -> None:
         st.session_state["scanner_last_results"] = sorted(open_ports_data, key=lambda x: x["Puerto"])
         st.session_state["scanner_last_target"] = raw_target
         st.session_state["scanner_last_elapsed"] = elapsed
+        # Limpiar informe anterior al hacer un nuevo escaneo
+        if "scanner_last_ai_report" in st.session_state:
+            del st.session_state["scanner_last_ai_report"]
 
     if "scanner_last_results" in st.session_state:
         results = st.session_state["scanner_last_results"]
@@ -217,6 +223,8 @@ def render_port_scanner_tab() -> None:
             st.markdown("### 📊 Puertos Abiertos y Hallazgos")
             st.dataframe(df, use_container_width=True)
 
+            ai_report_content = st.session_state.get("scanner_last_ai_report", "")
+
             if st.button("📝 Generar Informe Ejecutivo con IA (Groq)"):
                 with st.spinner("🤖 Analizando superficie de ataque y redactando informe..."):
                     prompt_ai = (
@@ -224,8 +232,109 @@ def render_port_scanner_tab() -> None:
                         f"{df.to_string(index=False)}\n"
                         "Proporciona recomendaciones técnicas de hardening y mitigación de riesgos."
                     )
-                    ai_report = call_groq_api(prompt_ai)
-                    st.markdown("### 📋 Informe de Seguridad (Groq AI)")
-                    st.markdown(ai_report)
+                    ai_report_content = call_groq_api(prompt_ai)
+                    st.session_state["scanner_last_ai_report"] = ai_report_content
+
+            if ai_report_content:
+                st.markdown("### 📋 Informe de Seguridad (Groq AI)")
+                st.markdown(ai_report_content)
+
+            # 📁 Módulo de Exportación Multiformato
+            st.markdown("---")
+            st.markdown("### 📥 Exportar Resultados de Auditoría")
+            
+            export_format = st.selectbox(
+                "Selecciona el formato de exportación",
+                options=["CSV", "JSON", "Word (.docx)", "PDF"],
+                index=0
+            )
+
+            if export_format == "CSV":
+                csv_data = df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="⬇️ Descargar Reporte en CSV",
+                    data=csv_data,
+                    file_name=f"atomum_audit_{last_target}.csv",
+                    mime="text/csv"
+                )
+            elif export_format == "JSON":
+                json_data = json.dumps({
+                    "target": last_target,
+                    "elapsed_seconds": elapsed,
+                    "results": results,
+                    "ai_report": ai_report_content
+                }, indent=4, ensure_ascii=False).encode("utf-8")
+                st.download_button(
+                    label="⬇️ Descargar Reporte en JSON",
+                    data=json_data,
+                    file_name=f"atomum_audit_{last_target}.json",
+                    mime="application/json"
+                )
+            elif export_format == "Word (.docx)":
+                try:
+                    from docx import Document
+                    doc = Document()
+                    doc.add_heading(f"Reporte de Auditoría ATOMUM: {last_target}", 0)
+                    doc.add_paragraph(f"Fecha de ejecución: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                    doc.add_paragraph(f"Tiempo de escaneo: {elapsed:.2f} segundos")
+                    
+                    doc.add_heading("Hallazgos de Puertos Abiertos", level=1)
+                    for r in results:
+                        doc.add_paragraph(
+                            f"Puerto: {r['Puerto']} | Estado: {r['Estado']} | Servicio: {r['Servicio']} | "
+                            f"SO: {r['SO Estimado']} | Riesgo: {r['Riesgo']} | Versión: {r['Banner / Versión']}",
+                            style='List Bullet'
+                        )
+                    
+                    if ai_report_content:
+                        doc.add_heading("Informe Ejecutivo y Hardening (Groq AI)", level=1)
+                        doc.add_paragraph(ai_report_content)
+                    
+                    bio = io.BytesIO()
+                    doc.save(bio)
+                    bio.seek(0)
+                    st.download_button(
+                        label="⬇️ Descargar Reporte en Word (.docx)",
+                        data=bio.getvalue(),
+                        file_name=f"atomum_audit_{last_target}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    )
+                except ImportError:
+                    st.warning("⚠️ La librería `python-docx` no está disponible en el entorno.")
+            elif export_format == "PDF":
+                try:
+                    from fpdf import FPDF
+                    pdf = FPDF()
+                    pdf.add_page()
+                    pdf.set_font("Arial", "B", 16)
+                    pdf.cell(0, 10, f"ATOMUM Security Audit: {last_target}", ln=True)
+                    pdf.set_font("Arial", "", 10)
+                    pdf.cell(0, 10, f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Elapsed: {elapsed:.2f}s", ln=True)
+                    pdf.ln(5)
+                    
+                    pdf.set_font("Arial", "B", 12)
+                    pdf.cell(0, 10, "Open Ports & Findings:", ln=True)
+                    pdf.set_font("Arial", "", 9)
+                    for r in results:
+                        line = f"Port: {r['Puerto']} | Serv: {r['Servicio']} | OS: {r['SO Estimado']} | Risk: {r['Riesgo']}"
+                        pdf.cell(0, 6, line, ln=True)
+                    
+                    if ai_report_content:
+                        pdf.ln(5)
+                        pdf.set_font("Arial", "B", 12)
+                        pdf.cell(0, 10, "AI Security Recommendations:", ln=True)
+                        pdf.set_font("Arial", "", 8)
+                        for line_text in ai_report_content.split("\n"):
+                            pdf.multi_cell(0, 5, line_text)
+                            
+                    pdf_output = pdf.output(dest='S').encode('latin1')
+                    st.download_button(
+                        label="⬇️ Descargar Reporte en PDF",
+                        data=pdf_output,
+                        file_name=f"atomum_audit_{last_target}.pdf",
+                        mime="application/pdf"
+                    )
+                except ImportError:
+                    st.warning("⚠️ La librería `fpdf2` no está disponible en el entorno.")
         else:
             st.info("🛡️ No se detectaron puertos abiertos en el rango seleccionado para este objetivo.")
