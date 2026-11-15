@@ -1,17 +1,34 @@
 # security/port_scanner/core.py
 """
-Motor asíncrono de escaneo de puertos TCP con Banner Grabbing de doble pasada (Retry Pass)
-y correlación de CVEs conocidos.
+Motor asíncrono de escaneo de puertos TCP con Banner Grabbing de doble pasada,
+mapeo extendido de servicios y correlación de CVEs conocidos.
 """
 import asyncio
 import socket
 from typing import Callable, Iterable, List, Tuple, Optional
 
 PortResult = Tuple[str, int, bool]
-BannerResult = Tuple[str, int, bool, str, str]
+BannerResult = Tuple[str, int, bool, str, str, str]  # (host, port, is_open, banner, service, vulns)
 OnOpenCallback = Callable[[BannerResult], None]
 OnCloseCallback = Callable[[PortResult], None]
 OnErrorCallback = Callable[[str, Exception], None]
+
+def _identify_service(port: int, banner: str) -> str:
+    """Mapea puertos comunes y analiza banners para sugerir el servicio real."""
+    banner_lower = banner.lower()
+    
+    if port == 21 or "ftp" in banner_lower: return "FTP"
+    if port == 22 or "ssh" in banner_lower: return "SSH"
+    if port == 25 or "smtp" in banner_lower: return "SMTP"
+    if port == 53 or "dns" in banner_lower: return "DNS"
+    if port in (80, 8080, 8000) or "http" in banner_lower: return "HTTP"
+    if port == 443 or "https" in banner_lower: return "HTTPS"
+    if port == 3306 or "mysql" in banner_lower: return "MySQL"
+    if port == 5432 or "postgres" in banner_lower: return "PostgreSQL"
+    if port == 6379 or "redis" in banner_lower: return "Redis"
+    if port == 9929 or "nmap" in banner_lower: return "Nmap Scripting / Ping"
+    
+    return "Servicio Genérico / TCP"
 
 def _check_known_vulnerabilities(port: int, banner: str) -> str:
     """Heurística rápida para asociar banners/versiones a CVEs o riesgos conocidos."""
@@ -25,34 +42,30 @@ def _check_known_vulnerabilities(port: int, banner: str) -> str:
     if port == 21 and ("ftp" in banner_lower or "vsftpd 2.3.4" in banner_lower):
         vulns.append("CVE-2011-2523 (vsftpd 2.3.4 Backdoor)")
 
-    if port == 80 or port == 443:
+    if port in (80, 443, 8080):
         if "apache" in banner_lower:
             vulns.append("Revisar CVEs específicos de versión Apache")
         elif "nginx" in banner_lower:
             vulns.append("Revisar directivas de configuración Nginx")
 
     if not vulns:
-        return "Sin vulnerabilidades críticas conocidas en base estática"
+        return "Bajo Riesgo / Sin CVE crítico directo"
     
     return " | ".join(vulns)
 
-async def _deep_grab_banner(host: str, port: int, timeout: float = 3.0) -> str:
-    """Intenta capturar el banner de bienvenida con mayor paciencia y reintentos para puertos abiertos."""
+async def _deep_grab_banner(host: str, port: int, timeout: float = 3.0) -> Tuple[str, str, str]:
+    """Captura el banner de bienvenida y determina servicio y vulnerabilidades."""
     banner = ""
-    for attempt in range(2):  # Dos intentos dedicados
+    for attempt in range(2):
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(host, port), timeout=timeout
             )
             try:
-                # Saludo específico según el tipo de servicio común
                 if port in (80, 8080):
                     writer.write(b"HEAD / HTTP/1.0\r\nHost: " + host.encode() + b"\r\n\r\n")
                     await writer.drain()
-                elif port == 22:
-                    # Esperamos pasivamente que SSH envíe su versión inicial
-                    pass
-
+                
                 data = await asyncio.wait_for(reader.read(1024), timeout=timeout)
                 if data:
                     banner = data.decode("utf-8", errors="ignore").strip().split("\n")[0]
@@ -72,7 +85,10 @@ async def _deep_grab_banner(host: str, port: int, timeout: float = 3.0) -> str:
         if banner:
             break
 
-    return banner if banner else "Servicio Activo (Sin banner explícito)"
+    final_banner = banner if banner else "Servicio Activo (Sin banner explícito)"
+    service = _identify_service(port, final_banner)
+    vulns = _check_known_vulnerabilities(port, final_banner)
+    return final_banner, service, vulns
 
 class PortScanner:
     def __init__(
@@ -107,11 +123,8 @@ class PortScanner:
                 is_open = False
 
             if is_open:
-                # Segunda pasada: Realizamos el Banner Grabbing profundo y análisis de CVEs
-                banner = await _deep_grab_banner(host, port)
-                vulns = _check_known_vulnerabilities(port, banner)
-                
-                result: BannerResult = (host, port, True, banner, vulns)
+                banner, service, vulns = await _deep_grab_banner(host, port)
+                result: BannerResult = (host, port, True, banner, service, vulns)
                 self._results.append(result)
                 if self.on_open:
                     self.on_open(result)
