@@ -45,3 +45,6 @@ Thumbs.db
 
 # Carpeta temporal para exportación de informes DOCX
 tmp_exports/
+
+# Secretos y configuración local de Streamlit Cloud
+.streamlit/secrets.toml
