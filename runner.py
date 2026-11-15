@@ -10,6 +10,7 @@ import ast
 import asyncio
 from datetime import datetime, timezone
 import json
+import logging
 import os
 import re
 import sys
@@ -22,7 +23,9 @@ from atomum.inference.stub_inference import StubInferenceClient
 from skills.file_tools import FileTools
 from skills.git_ops import GitOperations
 from skills.system_tools import SystemTools
-from utils.logger import logger
+
+logger = logging.getLogger("atomum.runner")
+logging.basicConfig(level=logging.INFO)
 
 
 class AutonomousRunner:
