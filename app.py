@@ -104,7 +104,7 @@ def load_atomum_modular_core():
         inference_engine = InferenceService()
         mode = "Groq Cloud Engine"
     else:
-        inference_engine = InferenceService(client=StubInferenceEngine())
+        inference_engine = InferenceService(client=StubInference())
         mode = "Local Stub Engine"
     planner = Planner()
     return inference_engine, context_svc, planner, mode
