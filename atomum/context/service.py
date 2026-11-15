@@ -1,8 +1,9 @@
 from typing import Any, Dict, List, Optional
 from atomum.interfaces.context import ContextStore
 
+
 class ContextService(ContextStore):
-    def __init__(self):
+    def __init__(self) -> None:
         # Almacenamiento en memoria volátil (puede extenderse luego a JSON, Redis o DB)
         self._store: Dict[str, Any] = {}
 
