@@ -101,18 +101,16 @@ def render_port_scanner_tab() -> None:
             effective_concurrency = max(concurrency, 500)
             effective_timeout = timeout
             st.warning(
-                f"🚀 Full Scan activado: auditando 65.535 puertos con concurrencia={effective_concurrency}."
+                f"🚀 Full Scan activado: auditando los 65.535 puertos a velocidad máxima (concurrencia={effective_concurrency})."
             )
         elif "Modo Animal" in scan_profile:
-            ports_list = parse_port_range(ports_input)
-            if not ports_list:
-                st.error("❌ El formato de puertos especificado es inválido.")
-                return
+            # El Modo Animal ahora barre los 65.535 puertos de forma sigilosa y robusta
+            ports_list = list(range(1, 65536))
             effective_concurrency = min(concurrency, 15)
             effective_timeout = max(timeout, 3.0)
             st.warning(
-                f"🦁 Modo Animal / Sigiloso activado: concurrencia reducida a {effective_concurrency} "
-                f"y timeout extendido a {effective_timeout}s. Este proceso puede demorar varios minutos."
+                f"🦁 Modo Animal activado: barrido completo de 65.535 puertos con concurrencia reducida ({effective_concurrency}) "
+                f"y timeout extendido ({effective_timeout}s) para evitar bloqueos. Este proceso demorará unos minutos."
             )
         else:
             effective_concurrency = concurrency
