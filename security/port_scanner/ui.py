@@ -414,9 +414,14 @@ def render_port_scanner_tab() -> None:
                 except ImportError:
                     st.warning("⚠️ La librería `fpdf2` no está disponible en el entorno.")
             elif export_format == "HTML Interactivo (.html)":
-                try:
-                    # Estructura HTML mejorada, moderna, autocontenida y en Dark Mode profesional
-                    html_content = f"""<!DOCTYPE html>
+            try:
+                # Calcular métricas KPI para el resumen superior
+                total_ports_count = len(results)
+                high_risks_count = sum(1 for r in results if "ALTO" in r['Riesgo'].upper() or "🔴" in r['Riesgo'])
+                med_low_count = total_ports_count - high_risks_count
+
+                # Estructura HTML corporativa avanzada con interactividad JS
+                html_content = f"""<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -426,6 +431,7 @@ def render_port_scanner_tab() -> None:
         :root {{
             --bg-main: #0d1117;
             --bg-card: #161b22;
+            --bg-hover: #21262d;
             --border-color: #30363d;
             --text-main: #c9d1d9;
             --text-muted: #8b949e;
@@ -443,7 +449,7 @@ def render_port_scanner_tab() -> None:
             line-height: 1.6;
         }}
         .container {{
-            max-width: 1000px;
+            max-width: 1050px;
             margin: auto;
             background: var(--bg-card);
             padding: 40px;
@@ -454,37 +460,65 @@ def render_port_scanner_tab() -> None:
         header {{
             border-bottom: 2px solid var(--border-color);
             padding-bottom: 20px;
-            margin-bottom: 30px;
+            margin-bottom: 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
         }}
         h1 {{
             color: var(--accent-blue);
             font-size: 26px;
-            margin: 0 0 10px 0;
+            margin: 0;
         }}
-        .meta-box {{
-            background: rgba(88, 166, 255, 0.05);
-            border-left: 4px solid var(--accent-blue);
-            padding: 12px 18px;
-            border-radius: 6px;
-            font-size: 14px;
-            color: var(--text-muted);
+        /* KPI Cards */
+        .kpi-container {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
             margin-bottom: 30px;
+        }}
+        .kpi-card {{
+            background: var(--bg-hover);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }}
+        .kpi-value {{
+            font-size: 24px;
+            font-weight: bold;
+            font-family: monospace;
+            color: var(--accent-blue);
+            margin-top: 5px;
+        }}
+        .kpi-value.danger {{ color: var(--risk-high); }}
+        .kpi-title {{
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }}
         h2 {{
             color: #7ee787;
-            font-size: 20px;
+            font-size: 18px;
             border-bottom: 1px solid var(--border-color);
             padding-bottom: 8px;
-            margin-top: 40px;
+            margin-top: 35px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
         }}
         .port-grid {{
             display: grid;
             grid-template-columns: 1fr;
             gap: 12px;
-            margin-bottom: 30px;
+            margin-bottom: 25px;
         }}
         .port-card {{
-            background: #21262d;
+            background: var(--bg-hover);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 15px 20px;
@@ -492,6 +526,10 @@ def render_port_scanner_tab() -> None:
             flex-wrap: wrap;
             justify-content: space-between;
             align-items: center;
+            transition: border-color 0.2s;
+        }}
+        .port-card:hover {{
+            border-color: var(--accent-blue);
         }}
         .port-badge {{
             font-weight: bold;
@@ -510,18 +548,48 @@ def render_port_scanner_tab() -> None:
         .risk-med {{ background: rgba(210, 153, 34, 0.15); color: var(--risk-med); border: 1px solid var(--risk-med); }}
         .risk-low {{ background: rgba(63, 185, 80, 0.15); color: var(--risk-low); border: 1px solid var(--risk-low); }}
         
+        /* Contenedor IA con Botón de Copiado */
+        .ai-wrapper {{
+            position: relative;
+            margin-top: 15px;
+        }}
+        .copy-btn {{
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: #30363d;
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }}
+        .copy-btn:hover {{
+            background: var(--accent-blue);
+            color: #fff;
+        }}
         .ai-report {{
             background: var(--bg-main);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 25px;
+            padding-top: 45px;
             white-space: pre-wrap;
-            font-size: 14px;
+            font-size: 13.5px;
             color: #d2d6dc;
             font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace;
+            max-height: 600px;
+            overflow-y: auto;
+        }}
+        /* Estilos de Acordeón */
+        .collapsible-content {{
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
         }}
         footer {{
-            margin-top: 50px;
+            margin-top: 45px;
             text-align: center;
             font-size: 12px;
             color: var(--text-muted);
@@ -529,57 +597,99 @@ def render_port_scanner_tab() -> None:
             padding-top: 20px;
         }}
     </style>
+    <script>
+        function toggleSection(id) {{
+            var content = document.getElementById(id);
+            if (content.style.maxHeight) {{
+                content.style.maxHeight = null;
+            }} else {{
+                content.style.maxHeight = content.scrollHeight + "px";
+            }}
+        }}
+        function copyAiReport() {{
+            var text = document.getElementById("aiReportText").innerText;
+            navigator.clipboard.writeText(text).then(function() {{
+                var btn = document.getElementById("copyBtn");
+                btn.innerText = "¡Copiado! ✅";
+                setTimeout(function() {{ btn.innerText = "📋 Copiar Informe"; }}, 2000);
+            }});
+        }}
+    </script>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🛡️ Reporte de Auditoría ATOMUM</h1>
-            <div style="font-size: 16px; color: var(--text-muted);">Objetivo analizado: <strong style="color: var(--accent-blue);">{last_target}</strong></div>
+            <div>
+                <h1>🛡️ Reporte de Auditoría ATOMUM</h1>
+                <div style="font-size: 14px; color: var(--text-muted); margin-top: 4px;">Objetivo analizado: <strong style="color: var(--accent-blue);">{last_target}</strong></div>
+            </div>
+            <div style="text-align: right; font-size: 13px; color: var(--text-muted);">
+                📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br>
+                ⏱️ Tiempo: {elapsed:.2f}s
+            </div>
         </header>
 
-        <div class="meta-box">
-            📅 <strong>Fecha de ejecución:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br>
-            ⏱️ <strong>Tiempo total de escaneo:</strong> {elapsed:.2f} segundos
+        <!-- KPI Cards -->
+        <div class="kpi-container">
+            <div class="kpi-card">
+                <div class="kpi-title">Puertos Abiertos</div>
+                <div class="kpi-value">{total_ports_count}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">Hallazgos Críticos (Alto)</div>
+                <div class="kpi-value danger">{high_risks_count}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">Riesgo Moderado / Bajo</div>
+                <div class="kpi-value">{med_low_count}</div>
+            </div>
         </div>
 
-        <h2>📊 Puertos Abiertos y Hallazgos</h2>
-        <div class="port-grid">
+        <h2 onclick="toggleSection('portsSection')">📊 Puertos Abiertos y Hallazgos <span>▼</span></h2>
+        <div id="portsSection" class="collapsible-content" style="max-height: 1000px;">
+            <div class="port-grid" style="margin-top: 15px;">
 """
-                    for r in results:
-                        risk_val = r['Riesgo']
-                        css_risk = "risk-high" if "ALTO" in risk_val.upper() or "🔴" in risk_val else ("risk-med" if "MEDIO" in risk_val.upper() or "🟡" in risk_val else "risk-low")
-                        clean_risk_text = risk_val.replace('🔴 ', '').replace('🟡 ', '').replace('🟢 ', '')
-                        
-                        html_content += f"""            <div class="port-card">
-                <div>
-                    <span class="port-badge">Puerto {r['Puerto']} ({r['Servicio']})</span><br>
-                    <span style="font-size: 13px; color: var(--text-muted);">SO Estimado: {r['SO Estimado']} | Versión: {r['Banner / Versión']}</span>
-                </div>
-                <div>
-                    <span class="risk-tag {css_risk}">{clean_risk_text}</span>
-                </div>
-            </div>\n"""
+                for r in results:
+                    risk_val = r['Riesgo']
+                    css_risk = "risk-high" if "ALTO" in risk_val.upper() or "🔴" in risk_val else ("risk-med" if "MEDIO" in risk_val.upper() or "🟡" in risk_val else "risk-low")
+                    clean_risk_text = risk_val.replace('🔴 ', '').replace('🟡 ', '').replace('🟢 ', '')
+                    
+                    html_content += f"""                <div class="port-card">
+                    <div>
+                        <span class="port-badge">Puerto {r['Puerto']} ({r['Servicio']})</span><br>
+                        <span style="font-size: 13px; color: var(--text-muted);">SO Estimado: {r['SO Estimado']} | Versión: {r['Banner / Versión']}</span>
+                    </div>
+                    <div>
+                        <span class="risk-tag {css_risk}">{clean_risk_text}</span>
+                    </div>
+                </div>\n"""
 
-                    html_content += """        </div>\n"""
+                html_content += """            </div>
+        </div>\n"""
 
-                    if ai_report_content:
-                        html_content += f"""        <h2>🤖 Informe Ejecutivo y Hardening (Groq AI)</h2>
-        <div class="ai-report">{ai_report_content}</div>\n"""
+                if ai_report_content:
+                    html_content += f"""        <h2 onclick="toggleSection('aiSection')" style="margin-top: 25px;">🤖 Informe Ejecutivo y Hardening (Groq AI) <span>▼</span></h2>
+        <div id="aiSection" class="collapsible-content" style="max-height: 2000px;">
+            <div class="ai-wrapper">
+                <button id="copyBtn" class="copy-btn" onclick="copyAiReport()">📋 Copiar Informe</button>
+                <div id="aiReportText" class="ai-report">{ai_report_content}</div>
+            </div>
+        </div>\n"""
 
-                    html_content += f"""        <footer>
+                html_content += f"""        <footer>
             ATOMUM Modular Core v2.0 &bull; Motor Activo: Groq Cloud Engine &bull; Auditoría Autónoma de Seguridad
         </footer>
     </div>
 </body>
 </html>"""
 
-                    st.download_button(
-                        label="⬇️ Descargar Reporte HTML Optimizado (.html)",
-                        data=html_content.encode('utf-8'),
-                        file_name=f"atomum_audit_{last_target}.html",
-                        mime="text/html"
-                    )
-                except Exception as e:
-                    st.error(f"⚠️ Error generando el reporte HTML avanzado: {e}")
+                st.download_button(
+                    label="⬇️ Descargar Reporte HTML Corporativo Avanzado (.html)",
+                    data=html_content.encode('utf-8'),
+                    file_name=f"atomum_audit_{last_target}.html",
+                    mime="text/html"
+                )
+            except Exception as e:
+                st.error(f"⚠️ Error generando el reporte HTML corporativo: {e}")
         else:
             st.info("🛡️ No se detectaron puertos abiertos en el rango seleccionado para este objetivo.")
