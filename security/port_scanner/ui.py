@@ -317,7 +317,9 @@ def render_port_scanner_tab() -> None:
                     pdf.set_font("Arial", "", 9)
                     for r in results:
                         line = f"Port: {r['Puerto']} | Serv: {r['Servicio']} | OS: {r['SO Estimado']} | Risk: {r['Riesgo']}"
-                        pdf.cell(0, 6, line, ln=True)
+                        # Sanitizar texto para evitar errores de codificación FPDF
+                        safe_line = line.encode('latin-1', 'replace').decode('latin-1')
+                        pdf.cell(0, 6, safe_line, ln=True)
                     
                     if ai_report_content:
                         pdf.ln(5)
@@ -325,7 +327,8 @@ def render_port_scanner_tab() -> None:
                         pdf.cell(0, 10, "AI Security Recommendations:", ln=True)
                         pdf.set_font("Arial", "", 8)
                         for line_text in ai_report_content.split("\n"):
-                            pdf.multi_cell(0, 5, line_text)
+                            safe_text = line_text.encode('latin-1', 'replace').decode('latin-1')
+                            pdf.multi_cell(0, 5, safe_text)
                             
                     pdf_output = pdf.output(dest='S').encode('latin1')
                     st.download_button(
