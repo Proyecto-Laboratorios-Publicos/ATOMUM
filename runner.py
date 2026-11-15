@@ -42,7 +42,7 @@ class AutonomousRunner:
         else:
             self.inference = InferenceService(client=StubInferenceClient())
 
-        # Blindaje preventivo: Si la variable de entorno tiene el modelo viejo, lo forzamos al moderno
+        # Blindaje preventivo: Forzar modelo moderno
         raw_model = os.getenv("ATOMUM_LLM_MODEL", "openai/gpt-oss-120b")
         if "llama3-70b-8192" in raw_model:
             logger.warning("⚠️ [Runner] Detectado modelo deprecado en entorno. Forzando a 'openai/gpt-oss-120b'.")
@@ -54,7 +54,6 @@ class AutonomousRunner:
         title_match = re.search(r"^TITLE:\s*(.+)$", raw_text, re.MULTILINE)
         summary_match = re.search(r"^SUMMARY:\s*(.+)$", raw_text, re.MULTILINE)
         
-        # Extracción tolerante de bloques de código
         code_match = re.search(r"```(?:python)?\s*\n(.*?)(?:\n\s*```|$)", raw_text, re.DOTALL)
         if not code_match or not code_match.group(1).strip():
             raise ValueError("No se encontró código Python válido en la respuesta del modelo.")
