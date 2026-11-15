@@ -1,13 +1,14 @@
 # security/port_scanner/core.py
 """
-Motor asíncrono de escaneo de puertos TCP con Banner Grabbing y Mapeo de Vulnerabilidades.
+Motor asíncrono de escaneo de puertos TCP con Banner Grabbing de doble pasada (Retry Pass)
+y correlación de CVEs conocidos.
 """
 import asyncio
 import socket
 from typing import Callable, Iterable, List, Tuple, Optional
 
 PortResult = Tuple[str, int, bool]
-BannerResult = Tuple[str, int, bool, str, str]  # Añadimos la columna de vulnerabilidades
+BannerResult = Tuple[str, int, bool, str, str]
 OnOpenCallback = Callable[[BannerResult], None]
 OnCloseCallback = Callable[[PortResult], None]
 OnErrorCallback = Callable[[str, Exception], None]
@@ -17,7 +18,6 @@ def _check_known_vulnerabilities(port: int, banner: str) -> str:
     banner_lower = banner.lower()
     vulns = []
 
-    # Ejemplo histórico para la versión de OpenSSH que suele devolver scanme.nmap.org
     if "openssh_6.6.1" in banner_lower:
         vulns.append("CVE-2015-5600 (Keyboard-Interactive Brute Force)")
         vulns.append("CVE-2016-0777 (Roaming Information Leak)")
@@ -36,75 +36,49 @@ def _check_known_vulnerabilities(port: int, banner: str) -> str:
     
     return " | ".join(vulns)
 
-async def _grab_banner(host: str, port: int, timeout: float) -> Tuple[str, str]:
-    """Captura el banner e identifica vulnerabilidades asociadas."""
+async def _deep_grab_banner(host: str, port: int, timeout: float = 3.0) -> str:
+    """Intenta capturar el banner de bienvenida con mayor paciencia y reintentos para puertos abiertos."""
     banner = ""
-    try:
-        reader, writer = await asyncio.wait_for(
-            asyncio.open_connection(host, port), timeout=timeout
-        )
+    for attempt in range(2):  # Dos intentos dedicados
         try:
-            if port in (80, 8080):
-                writer.write(b"HEAD / HTTP/1.0\r\nHost: " + host.encode() + b"\r\n\r\n")
-                await writer.drain()
-            
-            data = await asyncio.wait_for(reader.read(512), timeout=1.0)
-            if data:
-                banner = data.decode("utf-8", errors="ignore").strip().split("\n")[0]
-        except Exception:
-            pass
-        finally:
-            writer.close()
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(host, port), timeout=timeout
+            )
             try:
-                await writer.wait_closed()
+                # Saludo específico según el tipo de servicio común
+                if port in (80, 8080):
+                    writer.write(b"HEAD / HTTP/1.0\r\nHost: " + host.encode() + b"\r\n\r\n")
+                    await writer.drain()
+                elif port == 22:
+                    # Esperamos pasivamente que SSH envíe su versión inicial
+                    pass
+
+                data = await asyncio.wait_for(reader.read(1024), timeout=timeout)
+                if data:
+                    banner = data.decode("utf-8", errors="ignore").strip().split("\n")[0]
+                    if banner:
+                        break
             except Exception:
                 pass
-    except Exception:
-        pass
-    
-    final_banner = banner if banner else "Servicio Activo (Sin banner explícito)"
-    vulns = _check_known_vulnerabilities(port, final_banner)
-    return final_banner, vulns
-
-async def _probe(
-    host: str,
-    port: int,
-    timeout: float,
-    *,
-    on_open: Optional[OnOpenCallback] = None,
-    on_close: Optional[OnCloseCallback] = None,
-    on_error: Optional[OnErrorCallback] = None
-) -> None:
-    try:
-        reader, writer = await asyncio.wait_for(
-            asyncio.open_connection(host, port), timeout=timeout
-        )
-        writer.close()
-        try:
-            await writer.wait_closed()
+            finally:
+                writer.close()
+                try:
+                    await writer.wait_closed()
+                except Exception:
+                    pass
         except Exception:
-            pass
+            await asyncio.sleep(0.5)
 
-        banner, vulns = await _grab_banner(host, port, timeout)
+        if banner:
+            break
 
-        if on_open:
-            on_open((host, port, True, banner, vulns))
-
-    except asyncio.TimeoutError as exc:
-        if on_close:
-            on_close((host, port, False))
-    except (ConnectionRefusedError, OSError) as exc:
-        if on_close:
-            on_close((host, port, False))
-    except Exception as exc:
-        if on_close:
-            on_close((host, port, False))
+    return banner if banner else "Servicio Activo (Sin banner explícito)"
 
 class PortScanner:
     def __init__(
         self,
-        concurrency: int = 300,
-        timeout: float = 2.0,
+        concurrency: int = 500,
+        timeout: float = 1.5,
         on_open: Optional[OnOpenCallback] = None,
         on_close: Optional[OnCloseCallback] = None,
         on_error: Optional[OnErrorCallback] = None
@@ -119,23 +93,31 @@ class PortScanner:
 
     async def _bounded_probe(self, host: str, port: int) -> None:
         async with self._semaphore:
-            def _local_on_open(res: BannerResult):
-                self._results.append(res)
+            is_open = False
+            try:
+                future = asyncio.open_connection(host, port)
+                _, writer = await asyncio.wait_for(future, timeout=self.timeout)
+                is_open = True
+                writer.close()
+                try:
+                    await writer.wait_closed()
+                except Exception:
+                    pass
+            except Exception:
+                is_open = False
+
+            if is_open:
+                # Segunda pasada: Realizamos el Banner Grabbing profundo y análisis de CVEs
+                banner = await _deep_grab_banner(host, port)
+                vulns = _check_known_vulnerabilities(port, banner)
+                
+                result: BannerResult = (host, port, True, banner, vulns)
+                self._results.append(result)
                 if self.on_open:
-                    self.on_open(res)
-
-            def _local_on_close(res: PortResult):
+                    self.on_open(result)
+            else:
                 if self.on_close:
-                    self.on_close(res)
-
-            await _probe(
-                host,
-                port,
-                self.timeout,
-                on_open=_local_on_open,
-                on_close=_local_on_close,
-                on_error=self.on_error
-            )
+                    self.on_close((host, port, False))
 
     async def scan_ports(self, host: str, ports: Iterable[int]) -> List[BannerResult]:
         self._results.clear()
