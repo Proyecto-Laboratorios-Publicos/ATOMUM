@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  inference:
+    build: .
+    container_name: atomum_inference
+    command: uvicorn atomum.inference.api:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - ATOMUM_DEFAULT_MODEL=${ATOMUM_DEFAULT_MODEL:-llama3-70b-8192}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  context:
+    build: .
+    container_name: atomum_context
+    command: uvicorn atomum.context.api:app --host 0.0.0.0 --port 8002
+    ports:
+      - "8002:8002"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  planning:
+    build: .
+    container_name: atomum_planning
+    command: uvicorn atomum.planning.api:app --host 0.0.0.0 --port 8003
+    ports:
+      - "8003:8003"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    depends_on:
+      inference:
+        condition: service_healthy
+      context:
+        condition: service_started
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: atomum_redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
