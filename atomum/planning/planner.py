@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, TypedDict
 
-from atomum.interfaces.planner import Planner
+from atomum.interfaces.planning import Planner
 from atomum.interfaces.inference import InferenceEngine
 
 
