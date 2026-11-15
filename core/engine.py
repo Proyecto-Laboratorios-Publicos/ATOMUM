@@ -192,7 +192,7 @@ def process_security_report(report: Dict[str, Any]) -> List[Dict[str, Any]]:
                 prompt += f"{i}. [{a['severity']}] {a['id']} in {a['file']}: {a['title']}\n"
 
             response = client.chat.completions.create(
-                model="mixtral-8x7b-32768",  # ejemplo de modelo Groq
+                model= settings.MODEL_NAME,  # ejemplo de modelo Groq
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.2,
                 max_tokens=1024,
