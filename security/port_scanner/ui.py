@@ -326,19 +326,15 @@ def render_port_scanner_tab() -> None:
                         pdf.cell(0, 10, "AI Security Recommendations:", ln=True)
                         pdf.set_font("Arial", "", 8)
                         
-                        # Procesar línea por línea asegurando ancho fijo (w=190) para evitar desbordes
                         for line_text in ai_report_content.split("\n"):
-                            # Si una línea es muy larga, cortarla o sanitizarla
                             safe_text = line_text.encode('latin-1', 'replace').decode('latin-1')
                             if not safe_text.strip():
                                 pdf.ln(3)
                                 continue
-                            # Usar w=190 en lugar de 0 para forzar el salto de línea dentro de los márgenes
                             pdf.multi_cell(190, 5, safe_text)
                             
-                    pdf_output = pdf.output()
-                    if isinstance(pdf_output, str):
-                        pdf_output = pdf_output.encode('latin-1')
+                    # Conversión limpia y directa de bytearray a bytes para Streamlit
+                    pdf_output = bytes(pdf.output())
 
                     st.download_button(
                         label="⬇️ Descargar Reporte en PDF",
