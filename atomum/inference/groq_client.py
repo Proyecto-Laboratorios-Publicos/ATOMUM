@@ -2,6 +2,7 @@ import os
 from typing import Any, Dict
 from groq import Groq
 from atomum.interfaces.inference import InferenceEngine
+from config.settings import settings
 
 class GroqInferenceClient(InferenceEngine):
     def __init__(self, api_key: str | None = None):
@@ -14,13 +15,19 @@ class GroqInferenceClient(InferenceEngine):
     async def run(self, model_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
         Ejecuta la inferencia contra el modelo de Groq utilizando los parámetros del payload.
+        Fuerza la mitigación de modelos deprecados reemplazándolos por el activo en settings.
         """
         try:
+            # Blindaje absoluto: si entra un modelo viejo o vacío, forzamos el de settings
+            active_model = settings.MODEL_NAME
+            if not model_id or "llama3-70b" in model_id or "mixtral" in model_id:
+                model_id = active_model
+
             messages = payload.get("messages", [])
             temperature = payload.get("temperature", 0.7)
             max_tokens = payload.get("max_tokens", 1024)
 
-            # Llamada al SDK oficial de Groq
+            # Llamada al SDK oficial de Groq con el modelo blindado
             chat_completion = self.client.chat.completions.create(
                 model=model_id,
                 messages=messages,
