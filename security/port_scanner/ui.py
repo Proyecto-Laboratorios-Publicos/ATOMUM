@@ -510,6 +510,7 @@ def render_port_scanner_tab() -> None:
             justify-content: space-between;
             align-items: center;
             cursor: pointer;
+            user-select: none;
         }}
         .port-grid {{
             display: grid;
