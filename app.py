@@ -18,11 +18,18 @@ from atomum.planning.planner import CognitivePlanner
 from runner import AutonomousRunner
 from config.settings import settings
 
-# Importar el renderizador visual del subpaquete de escaneo de puertos
+# Importar el renderizador visual del subpaquete de escaneo de puertos de forma robusta
+scanner_available = False
+render_port_scanner_tab = None
+
 try:
     from security.port_scanner.ui import render_port_scanner_tab
     scanner_available = True
-except ImportError:
+except Exception as e:
+    # Capturamos cualquier error (ImportError, ModuleNotFoundError, etc.) para depurar
+    import traceback
+    import streamlit as st_inner
+    st_inner.error(f"⚠️ Error detallado al importar el escáner: {e}")
     scanner_available = False
 
 # -----------------------------------------------------------------
@@ -278,10 +285,8 @@ with tab_self_improve:
 # PESTAÑA 3: Escáner de Puertos TCP (Security Suite)
 # -----------------------------------------------------------------
 with tab_scanner:
-    if scanner_available:
+    if scanner_available and render_port_scanner_tab is not None:
         render_port_scanner_tab()
     else:
-        st.error("❌ No se pudo cargar el módulo visual del escáner de puertos (`security.port_scanner.ui`).")
-
-st.markdown("---")
-st.markdown(f"🧬 *ATOMUM Modular Core v2.0 | Motor Activo: {active_mode}*")
+        st.error("❌ El módulo visual del escáner de puertos no pudo inicializarse correctamente.")
+        st.info("💡 Consejo: Verificá que los archivos __init__.py estén presentes tanto en 'security/' como en 'security/port_scanner/'.")
