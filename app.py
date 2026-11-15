@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from atomum.context.service import ContextService
 from atomum.inference.service import InferenceService
-from atomum.inference.stub_inference import StubInference
+from atomum.inference.stub_inference import StubInferenceClient
 from atomum.planning.planner import Planner
 
 # -----------------------------------------------------------------
@@ -104,7 +104,7 @@ def load_atomum_modular_core():
         inference_engine = InferenceService()
         mode = "Groq Cloud Engine"
     else:
-        inference_engine = InferenceService(client=StubInference())
+        inference_engine = InferenceService(client=StubInferenceClient())
         mode = "Local Stub Engine"
     planner = Planner()
     return inference_engine, context_svc, planner, mode
