@@ -321,7 +321,8 @@ def render_port_scanner_tab() -> None:
                     pdf.cell(0, 10, "Open Ports & Findings:", ln=True)
                     pdf.set_font("Arial", "", 9)
                     for r in results:
-                        line = f"Port: {r['Puerto']} | Serv: {r['Servicio']} | OS: {r['SO Estimado']} | Risk: {r['Riesgo']}"
+                        clean_risk = r['Riesgo'].replace('🔴 ', '[ALTO] ').replace('🟡 ', '[MEDIO] ').replace('🟢 ', '[BAJO] ')
+                        line = f"Port: {r['Puerto']} | Serv: {r['Servicio']} | OS: {r['SO Estimado']} | Risk: {clean_risk}"
                         safe_line = line.encode('latin-1', 'replace').decode('latin-1')
                         pdf.cell(190, 6, safe_line, ln=True)
                     
@@ -331,23 +332,21 @@ def render_port_scanner_tab() -> None:
                         pdf.cell(0, 10, "AI Security Recommendations:", ln=True)
                         pdf.set_font("Arial", "", 8)
                         
-                        # Limpiar formato Markdown para un PDF limpio y legible
                         for line_text in ai_report_content.split("\n"):
-                            # Omitir líneas de tablas Markdown puras (que empiezan con |)
                             if line_text.strip().startswith("|"):
                                 continue
                             
-                            # Limpiar asteriscos, numerales y flechas sobrantes
+                            # Limpiar formato Markdown, flechas y espacios invisibles Unicode
                             cleaned_text = re.sub(r'[*#_`]', '', line_text)
-                            cleaned_text = cleaned_text.replace('→', '->')
+                            cleaned_text = cleaned_text.replace('→', '->').replace('≥', '>=').replace('‑', '-')
+                            cleaned_text = cleaned_text.replace('\u202f', ' ').replace('\u00a0', ' ')
                             
                             safe_text = cleaned_text.encode('latin-1', 'replace').decode('latin-1')
                             if not safe_text.strip():
                                 pdf.ln(3)
                                 continue
                             
-                            # Si parece un título (líneas cortas sin puntuación final), ponerlo en negrita visual
-                            if len(safe_text.strip()) < 60 and not safe_text.strip().endswith('.'):
+                            if len(safe_text.strip()) < 65 and not safe_text.strip().endswith('.'):
                                 pdf.set_font("Arial", "B", 9)
                                 pdf.multi_cell(190, 5, safe_text.strip())
                                 pdf.set_font("Arial", "", 8)
