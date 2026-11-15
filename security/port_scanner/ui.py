@@ -253,10 +253,10 @@ def render_port_scanner_tab() -> None:
             st.markdown("### 📥 Exportar Resultados de Auditoría")
             
             export_format = st.selectbox(
-                "Selecciona el formato de exportación",
-                options=["CSV", "JSON", "Word (.docx)", "PDF"],
-                index=0
-            )
+    "Selecciona el formato de exportación",
+    options=["CSV", "JSON", "Word (.docx)", "PDF", "HTML Interactivo (.html)"],
+    index=0
+)
 
             if export_format == "CSV":
                 csv_data = df.to_csv(index=False).encode("utf-8")
