@@ -1,25 +1,49 @@
-# core.py
+# security/port_scanner/core.py
 """
-Motor asíncrono de escaneo de puertos TCP.
+Motor asíncrono de escaneo de puertos TCP con soporte para Banner Grabbing.
 - Utiliza asyncio + semaphore para limitar la concurrencia.
-- Emite callbacks (on_open, on_close, on_error) para que la UI o cualquier otro consumidor pueda reaccionar a cada evento.
-- Soporta timeout configurable y reintentos opcionales.
+- Emite callbacks detallados para capturar puertos abiertos, banners y estados.
 """
 import asyncio
 import socket
-from typing import Callable, Iterable, List, Tuple, Optional, Dict
+from typing import Callable, Iterable, List, Tuple, Optional
 
-# ----------------------------------------------------------------------
-# Tipos de callback
-# ----------------------------------------------------------------------
-PortResult = Tuple[str, int, bool]  # (host, port, is_open)
-OnOpenCallback = Callable[[PortResult], None]
+# Tipos de callback adaptados para soportar (host, port, is_open, banner)
+PortResult = Tuple[str, int, bool]
+BannerResult = Tuple[str, int, bool, str]
+OnOpenCallback = Callable[[BannerResult], None]
 OnCloseCallback = Callable[[PortResult], None]
 OnErrorCallback = Callable[[str, Exception], None]
 
-# ----------------------------------------------------------------------
-# Helper interno: intento de conexión TCP
-# ----------------------------------------------------------------------
+async def _grab_banner(host: str, port: int, timeout: float) -> str:
+    """Intenta capturar el banner de bienvenida del servicio abierto de forma segura."""
+    banner = ""
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(host, port), timeout=timeout
+        )
+        try:
+            # Enviar una pequeña directiva a puertos HTTP/HTTPS para forzar respuesta si es necesario
+            if port in (80, 8080):
+                writer.write(b"HEAD / HTTP/1.0\r\nHost: " + host.encode() + b"\r\n\r\n")
+                await writer.drain()
+            
+            data = await asyncio.wait_for(reader.read(512), timeout=1.0)
+            if data:
+                banner = data.decode("utf-8", errors="ignore").strip().split("\n")[0]
+        except Exception:
+            pass
+        finally:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
+    except Exception:
+        pass
+    
+    return banner if banner else "Servicio Activo (Sin banner explícito)"
+
 async def _probe(
     host: str,
     port: int,
@@ -30,25 +54,27 @@ async def _probe(
     on_error: Optional[OnErrorCallback] = None
 ) -> None:
     """
-    Intenta abrir una conexión TCP al (host, port).
-    Llama al callback correspondiente según el resultado.
+    Intenta abrir una conexión TCP al (host, port). 
+    Si está abierto, ejecuta el banner grabbing y emite el callback de apertura.
     """
     try:
         reader, writer = await asyncio.wait_for(
-            asyncio.open_connection(host, port),
-            timeout=timeout,
+            asyncio.open_connection(host, port), timeout=timeout
         )
-        # Si llega aquí, el puerto está abierto
-        if on_open:
-            on_open((host, port, True))
         
-        # Cerramos la conexión de forma limpia
+        # Puerto abierto: cerramos la conexión base temporalmente
         writer.close()
-        await writer.wait_closed()
-        
-        if on_close:
-            on_close((host, port, True))
-            
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+
+        # Capturamos el banner de forma asíncrona
+        banner = await _grab_banner(host, port, timeout)
+
+        if on_open:
+            on_open((host, port, True, banner))
+
     except asyncio.TimeoutError as exc:
         if on_close:
             on_close((host, port, False))
@@ -57,27 +83,20 @@ async def _probe(
     except (ConnectionRefusedError, OSError) as exc:
         if on_close:
             on_close((host, port, False))
-        if on_error:
-            on_error(f"Connection error {host}:{port}", exc)
     except Exception as exc:
+        if on_close:
+            on_close((host, port, False))
         if on_error:
             on_error(f"Unexpected error {host}:{port}", exc)
 
-# ----------------------------------------------------------------------
-# Clase pública: PortScanner
-# ----------------------------------------------------------------------
 class PortScanner:
     """
-    Escáner de puertos TCP basado en asyncio.
-    Parámetros:
-        concurrency (int): número máximo de tareas simultáneas.
-        timeout (float): segundos de espera para cada intento de conexión.
-        on_open / on_close / on_error: callbacks opcionales.
+    Escáner de puertos TCP avanzado basado en asyncio con control de concurrencia.
     """
     def __init__(
         self,
-        concurrency: int = 500,
-        timeout: float = 3.0,
+        concurrency: int = 300,
+        timeout: float = 2.0,
         on_open: Optional[OnOpenCallback] = None,
         on_close: Optional[OnCloseCallback] = None,
         on_error: Optional[OnErrorCallback] = None
@@ -87,15 +106,12 @@ class PortScanner:
         self.on_open = on_open
         self.on_close = on_close
         self.on_error = on_error
-        
-        # Estado interno
         self._semaphore = asyncio.Semaphore(self.concurrency)
-        self._tasks: List[asyncio.Task] = []
-        self._results: List[PortResult] = []
+        self._results: List[BannerResult] = []
 
     async def _bounded_probe(self, host: str, port: int) -> None:
         async with self._semaphore:
-            def _local_on_open(res: PortResult):
+            def _local_on_open(res: BannerResult):
                 self._results.append(res)
                 if self.on_open:
                     self.on_open(res)
@@ -113,9 +129,9 @@ class PortScanner:
                 on_error=self.on_error
             )
 
-    async def scan_ports(self, host: str, ports: Iterable[int]) -> List[PortResult]:
+    async def scan_ports(self, host: str, ports: Iterable[int]) -> List[BannerResult]:
         """
-        Escanea una lista o rango de puertos en un host de forma asíncrona y controlada.
+        Ejecuta el escaneo concurrente sobre la lista de puertos indicada.
         """
         self._results.clear()
         tasks = [self._bounded_probe(host, port) for port in ports]
