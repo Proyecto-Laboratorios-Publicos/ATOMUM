@@ -120,9 +120,7 @@ async def execute_modular_pipeline(instruction: str) -> str:
     # 2. Generar plan de ejecución
     plan = await planner.create_plan(instruction, {"source": "streamlit_ui"})
 
-    # 3. Ejecutar inferencia modular en formato messages
-    result = await inference.run(
-        model_id = (
+    model_id = (
         os.getenv("ATOMUM_LLM_MODEL")
         or st.secrets.get("ATOMUM_LLM_MODEL", "openai/gpt-oss-120b")
     )
