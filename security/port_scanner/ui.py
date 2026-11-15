@@ -317,7 +317,6 @@ def render_port_scanner_tab() -> None:
                     pdf.set_font("Arial", "", 9)
                     for r in results:
                         line = f"Port: {r['Puerto']} | Serv: {r['Servicio']} | OS: {r['SO Estimado']} | Risk: {r['Riesgo']}"
-                        # Sanitizar texto para evitar errores de codificación FPDF
                         safe_line = line.encode('latin-1', 'replace').decode('latin-1')
                         pdf.cell(0, 6, safe_line, ln=True)
                     
@@ -330,7 +329,11 @@ def render_port_scanner_tab() -> None:
                             safe_text = line_text.encode('latin-1', 'replace').decode('latin-1')
                             pdf.multi_cell(0, 5, safe_text)
                             
-                    pdf_output = pdf.output(dest='S').encode('latin1')
+                    # Obtener directamente los bytes del PDF de forma compatible con fpdf2 moderno
+                    pdf_output = pdf.output()
+                    if isinstance(pdf_output, str):
+                        pdf_output = pdf_output.encode('latin-1')
+
                     st.download_button(
                         label="⬇️ Descargar Reporte en PDF",
                         data=pdf_output,
