@@ -7,7 +7,6 @@ import streamlit as st
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from atomum.context.service import ContextService
-from atomum.inference.groq_client import GroqClient
 from atomum.inference.service import InferenceService
 from atomum.inference.stub_inference import StubInferenceEngine
 from atomum.planning.planner import Planner
@@ -99,12 +98,13 @@ inject_css(CYBERPUNK_CSS)
 @st.cache_resource
 def load_atomum_modular_core():
     context_svc = ContextService()
-    api_key = os.getenv("GROQ_API_KEY", "")
+    api_key = os.getenv("GROQ_API_KEY", "") or st.secrets.get("GROQ_API_KEY", "")
     if api_key and api_key != "test_stub_key":
-        inference_engine = InferenceService(client=GroqClient(api_key=api_key))
+        os.environ["GROQ_API_KEY"] = api_key
+        inference_engine = InferenceService()
         mode = "Groq Cloud Engine"
     else:
-        inference_engine = StubInferenceEngine()
+        inference_engine = InferenceService(client=StubInferenceEngine())
         mode = "Local Stub Engine"
     planner = Planner()
     return inference_engine, context_svc, planner, mode
@@ -120,17 +120,30 @@ async def execute_modular_pipeline(instruction: str) -> str:
     # 2. Generar plan de ejecución
     plan = await planner.create_plan(instruction, {"source": "streamlit_ui"})
 
-    # 3. Ejecutar inferencia modular
+    # 3. Ejecutar inferencia modular en formato messages
     result = await inference.run(
         model_id="llama-3.3-70b-versatile",
-        payload={"prompt": instruction, "plan": plan},
+        payload={
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "Eres ATOMUM, un sistema autónomo técnico de alta precisión.",
+                },
+                {"role": "user", "content": instruction},
+            ],
+            "plan": plan,
+        },
     )
+
+    if result.get("status") == "error":
+        return f"⚠️ Error del motor: {result.get('error_message')}"
 
     # 4. Extraer respuesta limpia y persistir en contexto
     output = (
         result.get("output")
         or result.get("response")
         or result.get("text")
+        or result.get("content")
         or str(result)
     )
     await context_store.set("last_output", {"response": output})
