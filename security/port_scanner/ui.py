@@ -312,28 +312,28 @@ def render_port_scanner_tab() -> None:
                     pdf = FPDF()
                     pdf.add_page()
                     
-                    # Definir márgenes limpios de 10mm en todo el documento
+                    # Definir márgenes limpios de 10mm
                     pdf.set_margins(left=10, top=10, right=10)
                     
                     pdf.set_font("Arial", "B", 16)
-                    pdf.cell(0, 10, f"ATOMUM Security Audit: {last_target}", ln=True)
+                    pdf.cell(190, 10, f"ATOMUM Security Audit: {last_target}", ln=True)
                     pdf.set_font("Arial", "", 10)
-                    pdf.cell(0, 10, f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Elapsed: {elapsed:.2f}s", ln=True)
+                    pdf.cell(190, 10, f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Elapsed: {elapsed:.2f}s", ln=True)
                     pdf.ln(5)
                     
                     pdf.set_font("Arial", "B", 12)
-                    pdf.cell(0, 10, "Open Ports & Findings:", ln=True)
+                    pdf.cell(190, 10, "Open Ports & Findings:", ln=True)
                     pdf.set_font("Arial", "", 9)
                     for r in results:
                         clean_risk = r['Riesgo'].replace('🔴 ', '[ALTO] ').replace('🟡 ', '[MEDIO] ').replace('🟢 ', '[BAJO] ')
                         line = f"Port: {r['Puerto']} | Serv: {r['Servicio']} | OS: {r['SO Estimado']} | Risk: {clean_risk}"
                         safe_line = line.encode('latin-1', 'replace').decode('latin-1')
-                        pdf.cell(0, 6, safe_line, ln=True)
+                        pdf.cell(190, 6, safe_line, ln=True)
                     
                     if ai_report_content:
                         pdf.ln(5)
                         pdf.set_font("Arial", "B", 12)
-                        pdf.cell(0, 10, "AI Security Recommendations:", ln=True)
+                        pdf.cell(190, 10, "AI Security Recommendations:", ln=True)
                         pdf.set_font("Arial", "", 8)
                         
                         for line_text in ai_report_content.split("\n"):
@@ -357,13 +357,13 @@ def render_port_scanner_tab() -> None:
                                 pdf.ln(3)
                                 continue
                             
-                            # Usar w=0 para que multi_cell respete exactamente el ancho entre márgenes
+                            # Usar un ancho fijo de 190 (exactamente el ancho útil de la hoja A4 con márgenes de 10mm)
                             if len(safe_text.strip()) < 65 and not safe_text.strip().endswith('.'):
                                 pdf.set_font("Arial", "B", 9)
-                                pdf.multi_cell(0, 5, safe_text.strip())
+                                pdf.multi_cell(190, 5, safe_text.strip())
                                 pdf.set_font("Arial", "", 8)
                             else:
-                                pdf.multi_cell(0, 5, safe_text)
+                                pdf.multi_cell(190, 5, safe_text)
                             
                     pdf_output = bytes(pdf.output())
 
