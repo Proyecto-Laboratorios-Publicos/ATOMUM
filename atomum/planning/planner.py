@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, TypedDict
 
-from atomum.interfaces.planning import Planner
+from atomum.interfaces.planner import Planner
 from atomum.interfaces.inference import InferenceEngine
 
 
 class Step(TypedDict, total=False):
     """Representa un paso individual del plan generado."""
+
     step: int
     action: str
     details: Any
@@ -23,8 +24,8 @@ class PlanGenerationError(Exception):
 
 class CognitivePlanner(Planner):
     """
-    Implementación de :class:`atomum.interfaces.planning.Planner` que delega la
-    generación de planes a un motor de inferencia LLM.
+    Implementación de :class:`atomum.interfaces.planning.Planner` que delega
+    la generación de planes a un motor de inferencia LLM.
 
     Parameters
     ----------
@@ -69,7 +70,6 @@ class CognitivePlanner(Planner):
             f"Dado el objetivo: '{goal}', desglosa un plan de pasos secuenciales "
             "en formato JSON."
         )
-
         payload: Dict[str, Any] = {
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.3,
@@ -77,7 +77,7 @@ class CognitivePlanner(Planner):
 
         try:
             response: Dict[str, Any] = await self.inference_engine.run(
-                "llama3-70b-8192", payload
+                "openai/gpt-oss-120b", payload
             )
         except Exception as exc:  # pylint: disable=broad-except
             raise PlanGenerationError(
