@@ -23,12 +23,13 @@ except ImportError:
             from groq import Groq
             from config.settings import settings
             client = Groq(api_key=api_key)
-            # Usar el modelo configurado en el sistema en lugar de uno hardcodeado ajeno
-            target_model = os.getenv("ATOMUM_LLM_MODEL", getattr(settings, "MODEL_NAME", "llama3-70b-8192"))
+            target_model = os.getenv(
+                "ATOMUM_LLM_MODEL", getattr(settings, "MODEL_NAME", "llama3-70b-8192")
+            )
             resp = client.chat.completions.create(
                 model=target_model,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=8192,  # <--- Margen extendido para evitar cortes
+                max_tokens=8192,
             )
             return resp.choices[0].message.content or "Sin respuesta del modelo."
         except Exception as exc:
@@ -51,22 +52,36 @@ def render_port_scanner_tab() -> None:
             )
         with col2:
             ports_input = st.text_input(
-                "Puertos a escanear",
+                "Puertos a escanear (Modo Estándar / Sigiloso)",
                 value="21,22,80,443,8080,3000-3010",
             )
 
-        animal_mode = st.checkbox(
-            "🦁 Modo Animal: Escaneo completo de los 65.535 puertos (1 - 65535) a máxima concurrencia"
+        scan_profile = st.radio(
+            "Perfil de Ejecución",
+            options=[
+                "⚡ Estándar / Personalizado (Rango definido arriba)",
+                "🚀 Full Scan (Todos los 65.535 puertos a alta concurrencia)",
+                "🦁 Modo Animal / Sigiloso (Baja concurrencia y mayor timeout para evitar bloqueos)",
+            ],
+            index=0,
         )
 
         col_opt1, col_opt2 = st.columns(2)
         with col_opt1:
             concurrency = st.slider(
-                "Concurrencia simultánea", min_value=10, max_value=1000, value=150, step=10
+                "Concurrencia simultánea (Manual)",
+                min_value=10,
+                max_value=1000,
+                value=150,
+                step=10,
             )
         with col_opt2:
             timeout = st.slider(
-                "Timeout por socket (segundos)", min_value=0.5, max_value=5.0, value=1.5, step=0.5
+                "Timeout por socket en segundos (Manual)",
+                min_value=0.5,
+                max_value=5.0,
+                value=1.5,
+                step=0.5,
             )
 
         submitted = st.form_submit_button("Iniciar Auditoría de Puertos 🚀")
@@ -81,14 +96,27 @@ def render_port_scanner_tab() -> None:
             st.error(f"❌ Objetivo bloqueado por seguridad: {resolved_or_error}")
             return
 
-        if animal_mode:
+        if "Full Scan" in scan_profile:
             ports_list = list(range(1, 65536))
             effective_concurrency = max(concurrency, 500)
+            effective_timeout = timeout
             st.warning(
-                f"🦁 Modo Animal activado: auditando 65.535 puertos con concurrencia={effective_concurrency}."
+                f"🚀 Full Scan activado: auditando 65.535 puertos con concurrencia={effective_concurrency}."
+            )
+        elif "Modo Animal" in scan_profile:
+            ports_list = parse_port_range(ports_input)
+            if not ports_list:
+                st.error("❌ El formato de puertos especificado es inválido.")
+                return
+            effective_concurrency = min(concurrency, 15)
+            effective_timeout = max(timeout, 3.0)
+            st.warning(
+                f"🦁 Modo Animal / Sigiloso activado: concurrencia reducida a {effective_concurrency} "
+                f"y timeout extendido a {effective_timeout}s. Este proceso puede demorar varios minutos."
             )
         else:
             effective_concurrency = concurrency
+            effective_timeout = timeout
             ports_list = parse_port_range(ports_input)
             if not ports_list:
                 st.error("❌ El formato de puertos especificado es inválido.")
@@ -137,7 +165,7 @@ def render_port_scanner_tab() -> None:
 
         scanner = PortScanner(
             concurrency=effective_concurrency,
-            timeout=timeout,
+            timeout=effective_timeout,
             on_open=handle_open,
             on_close=handle_close,
         )
