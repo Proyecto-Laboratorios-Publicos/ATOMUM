@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     
     # Parámetros operativos del núcleo
     DEBUG_MODE: bool = Field(default=False, description="Activa el modo de registro extendido")
-    MAX_TOKENS: int = Field(default=4096, description="Límite máximo de tokens por respuesta")
+    MAX_TOKENS: int = Field(default=8192, description="Límite máximo de tokens por respuesta")
 
     @field_validator('MODEL_NAME')
     @classmethod
