@@ -1,38 +1,48 @@
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
+
+
+__all__ = ["DataTools"]
 
 
 class DataTools:
     """
     Herramientas de procesamiento de datos.
 
-    Esta clase encapsula operaciones comunes sobre archivos JSON y
-    generación de resúmenes simples. Mantiene la compatibilidad total
-    con la versión anterior, añadiendo tipado estático y manejo
-    explícito de excepciones.
+    Esta clase encapsula operaciones comunes sobre archivos JSON y generación
+    de resúmenes simples. Mantiene la compatibilidad total con versiones
+    anteriores, añadiendo tipado estático y manejo explícito de excepciones.
     """
 
     def __init__(self) -> None:
         """
         Inicializa la clase mostrando un mensaje informativo.
         """
+        # Mensaje informativo que se mantiene para retro‑compatibilidad.
         print("📊 [Skills: Data] Herramientas de procesamiento de datos inicializadas.")
 
-    def read_json_file(self, file_path: str) -> Optional[Dict[str, Any]]:
+    def read_json_file(self, file_path: Union[str, Path]) -> Optional[Dict[str, Any]]:
         """
         Lee y carga datos estructurados de un archivo JSON de forma segura.
 
         Args:
-            file_path: Ruta al archivo JSON a leer.
+            file_path: Ruta al archivo JSON a leer. Puede ser una cadena o un
+                objeto :class:`pathlib.Path`.
 
         Returns:
             Un diccionario con el contenido del JSON si la operación tiene éxito,
             o ``None`` en caso de error (archivo inexistente, problemas de I/O o
             JSON mal formado).
+
+        Notas:
+            - Los mensajes de error se imprimen para conservar el comportamiento
+              original de la herramienta.
+            - Se capturan de forma explícita los errores esperados y, como último
+              recurso, cualquier otra excepción inesperada.
         """
-        path = Path(file_path)
+        path: Path = Path(file_path)
 
         if not path.is_file():
             print(f"❌ [Skills: Data Error] El archivo '{file_path}' no existe.")
@@ -57,16 +67,19 @@ class DataTools:
         Genera un resumen básico de una lista de eventos o métricas.
 
         Args:
-            data_list: Lista de elementos (pueden ser diccionarios, números, etc.).
+            data_list: Lista de elementos (pueden ser diccionarios, números,
+                etc.).
 
         Returns:
-            Un diccionario con el número total de registros y una muestra de los
-            primeros tres elementos (o una lista vacía si no hay datos).
+            Un diccionario con:
+                - ``total_records``: número total de elementos en ``data_list``.
+                - ``sample_records``: una muestra de los primeros tres elementos,
+                  o una lista vacía si ``data_list`` está vacío.
         """
         total_items: int = len(data_list)
         summary: Dict[str, Any] = {
             "total_records": total_items,
-            "sample_records": data_list[:3] if total_items > 0 else []
+            "sample_records": data_list[:3] if total_items > 0 else [],
         }
         print(f"📈 [Skills: Data] Resumen generado para {total_items} registros.")
         return summary
