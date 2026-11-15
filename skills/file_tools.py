@@ -1,7 +1,18 @@
 import os
 import json
 
+
 class FileTools:
+    PROTECTED_FILES = {
+        "CONSTITUTION.md",
+        ".env",
+        "LICENSE",
+    }
+    PROTECTED_PREFIXES = (
+        ".github/workflows/",
+        ".git/",
+    )
+
     def __init__(self, base_dir="."):
         self.base_dir = os.path.abspath(base_dir)
         print("📝 [Skills: Files] Herramientas avanzadas de manipulación de archivos inicializadas.")
@@ -9,14 +20,29 @@ class FileTools:
     def _get_safe_path(self, file_path: str) -> str:
         """Garantiza que la ruta del archivo se mantenga dentro del workspace seguro."""
         abs_path = os.path.abspath(os.path.join(self.base_dir, file_path))
+        if os.path.commonpath([self.base_dir, abs_path]) != self.base_dir:
+            raise ValueError(f"Acceso denegado fuera del workspace: '{file_path}'")
         return abs_path
+
+    def _is_protected(self, file_path: str) -> bool:
+        """Verifica si el archivo está bloqueado por guardarraíles constitucionales."""
+        norm_path = file_path.replace("\\", "/").lstrip("./")
+        if norm_path in self.PROTECTED_FILES or os.path.basename(norm_path) in self.PROTECTED_FILES:
+            return True
+        return any(norm_path.startswith(prefix) for prefix in self.PROTECTED_PREFIXES)
 
     def read_text_file(self, file_path: str) -> str:
         """Lee un archivo de texto de forma segura."""
-        safe_path = self._get_safe_path(file_path)
+        try:
+            safe_path = self._get_safe_path(file_path)
+        except ValueError as e:
+            print(f"🛡️ [Skills: Guardrail] {e}")
+            return None
+
         if not os.path.exists(safe_path):
             print(f"❌ [Skills: File Error] El archivo '{file_path}' no existe.")
             return None
+
         try:
             with open(safe_path, "r", encoding="utf-8") as f:
                 content = f.read()
@@ -27,13 +53,16 @@ class FileTools:
             return None
 
     def write_text_file(self, file_path: str, content: str) -> bool:
-        """Escribe o sobrescribe un archivo de texto de forma controlada."""
-        safe_path = self._get_safe_path(file_path)
+        """Escribe o sobrescribe un archivo de texto respetando archivos protegidos."""
+        if self._is_protected(file_path):
+            print(f"🛡️ [Skills: Guardrail] Escritura bloqueada sobre archivo protegido: '{file_path}'")
+            return False
+
         try:
+            safe_path = self._get_safe_path(file_path)
             dir_name = os.path.dirname(safe_path)
             if dir_name and not os.path.exists(dir_name):
                 os.makedirs(dir_name, exist_ok=True)
-                
             with open(safe_path, "w", encoding="utf-8") as f:
                 f.write(content)
             print(f"✅ [Skills: File] Archivo escrito con éxito: '{file_path}'")
@@ -63,9 +92,3 @@ class FileTools:
         except Exception as e:
             print(f"❌ [Skills: JSON Error] No se pudo serializar los datos a JSON: {e}")
             return False
-
-if __name__ == "__main__":
-    # Prueba rápida de las herramientas de archivos mejoradas
-    ft = FileTools()
-    ft.write_text_file("test_output.txt", "Prueba de escritura autónoma mejorada de Atomum.")
-    ft.read_text_file("test_output.txt")
