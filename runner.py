@@ -27,7 +27,9 @@ logging.basicConfig(level=logging.INFO)
 
 
 class AutonomousRunner:
-    def __init__(self, repo_slug: str = "Proyecto-Laboratorios-Publicos/ATOMUM"):
+    """Orquestador encargado de ejecutar ciclos autónomos de mejora y apertura de PRs."""
+
+    def __init__(self, repo_slug: str = "Proyecto-Laboratorios-Publicos/ATOMUM") -> None:
         self.repo_slug = repo_slug
         self.context = ContextService()
         self.files = FileTools(base_dir=".")
@@ -40,14 +42,19 @@ class AutonomousRunner:
         else:
             self.inference = InferenceService(client=StubInferenceClient())
 
-        self.model_id = os.getenv("ATOMUM_LLM_MODEL", "openai/gpt-oss-120b")
+        # Blindaje preventivo: Si la variable de entorno tiene el modelo viejo, lo forzamos al moderno
+        raw_model = os.getenv("ATOMUM_LLM_MODEL", "openai/gpt-oss-120b")
+        if "llama3-70b-8192" in raw_model:
+            logger.warning("⚠️ [Runner] Detectado modelo deprecado en entorno. Forzando a 'openai/gpt-oss-120b'.")
+            raw_model = "openai/gpt-oss-120b"
+        self.model_id = raw_model
 
     @staticmethod
     def _parse_proposal_response(raw_text: str, target_file: str, default_goal: str) -> dict:
         title_match = re.search(r"^TITLE:\s*(.+)$", raw_text, re.MULTILINE)
         summary_match = re.search(r"^SUMMARY:\s*(.+)$", raw_text, re.MULTILINE)
-
-        # Extrae desde ```python (o ```) hasta el cierre ``` o fin de texto
+        
+        # Extracción tolerante de bloques de código
         code_match = re.search(r"```(?:python)?\s*\n(.*?)(?:\n\s*```|$)", raw_text, re.DOTALL)
         if not code_match or not code_match.group(1).strip():
             raise ValueError("No se encontró código Python válido en la respuesta del modelo.")
@@ -71,7 +78,11 @@ class AutonomousRunner:
         logger.info(f"🚀 [Runner] Iniciando ciclo de auto-mejora sobre '{target_file}'...")
         await self.context.set(
             "last_runner_cycle",
-            {"target_file": target_file, "goal": goal, "timestamp": datetime.now(timezone.utc).isoformat()},
+            {
+                "target_file": target_file,
+                "goal": goal,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
         )
 
         original_code = self.files.read_text_file(target_file)
@@ -90,6 +101,7 @@ class AutonomousRunner:
             "```\n"
             "Mantén 100% de retrocompatibilidad y entrega el archivo completo."
         )
+
         user_prompt = (
             f"Objetivo: {goal}\n"
             f"Tareas: {json.dumps(tasks_data, ensure_ascii=False)[:1500]}\n"
@@ -108,7 +120,10 @@ class AutonomousRunner:
         )
 
         if llm_res.get("status") == "error":
-            return {"status": "error", "message": llm_res.get("error_message", "Fallo en inferencia")}
+            return {
+                "status": "error",
+                "message": llm_res.get("error_message", "Fallo en inferencia"),
+            }
 
         raw_content = (
             llm_res.get("output")
@@ -182,12 +197,14 @@ class AutonomousRunner:
             f"- **Resumen técnico:** {pr_summary}\n"
             f"- **Validación AST & Pytest:** `{test_output}`\n"
         )
+
         pr_res = self.git_ops.create_pull_request(
             title=f"[ATOMUM] {pr_title}",
             body=pr_body,
             head_branch=branch_name,
             repo_slug=self.repo_slug,
         )
+
         return {
             "status": "pr_opened" if pr_res.get("status") == "ok" else "error",
             "branch": branch_name,
