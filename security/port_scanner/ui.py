@@ -1,31 +1,42 @@
 # security/port_scanner/ui.py
 """
-Interfaz visual avanzada para el Escáner de Puertos TCP de ATOMUM con Banner Grabbing,
+Interfaz visual para el Escáner de Puertos TCP de ATOMUM con Banner Grabbing,
 correlación de CVEs, criticidad por colores y Resumen Ejecutivo con IA (Groq).
 """
 import asyncio
-import streamlit as st
-import pandas as pd
+import os
 from datetime import datetime
+import pandas as pd
+import streamlit as st
 
-from security.port_scanner.core import PortScanner
-from security.port_scanner.utils import validate_target, parse_port_range
+from security.port_scanner.core import BannerResult, PortResult, PortScanner
+from security.port_scanner.utils import parse_port_range, validate_target
 
-# Importación defensiva de Groq para evitar que falle toda la UI si hay un desfase de ruta
 try:
     from core.groq_client import call_groq_api
 except ImportError:
-    try:
-        from atomum.inference.service import InferenceService
-        def call_groq_api(prompt: str) -> str:
-            return f"Resumen sintético (Fallback local): {prompt[:200]}..."
-    except ImportError:
-        def call_groq_api(prompt: str) -> str:
-            return "Servicio de IA no disponible temporalmente."
+    def call_groq_api(prompt: str) -> str:
+        api_key = os.getenv("GROQ_API_KEY", "")
+        if not api_key:
+            return "⚠️ `GROQ_API_KEY` no configurada. No se puede generar el informe con IA."
+        try:
+            from groq import Groq
+            client = Groq(api_key=api_key)
+            resp = client.chat.completions.create(
+                model=os.getenv("ATOMUM_LLM_MODEL", "llama-3.3-70b-versatile"),
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return resp.choices[0].message.content or "Sin respuesta del modelo."
+        except Exception as exc:
+            return f"⚠️ Error al consultar Groq API: {exc}"
 
-def render_port_scanner_tab():
+
+def render_port_scanner_tab() -> None:
     st.subheader("🛡️ Escáner de Puertos, Banners & Auditoría de Vulnerabilidades")
-    st.markdown("Herramienta avanzada de auditoría con escaneo asíncrono, banner grabbing, criticidad y reporte ejecutivo por IA.")
+    st.markdown(
+        "Auditoría asíncrona TCP con banner grabbing en doble pasada, "
+        "clasificación de riesgo y análisis ejecutivo asistido por IA."
+    )
 
     with st.form("port_scanner_form"):
         col1, col2 = st.columns([2, 1])
@@ -39,14 +50,20 @@ def render_port_scanner_tab():
                 "Puertos a escanear",
                 value="21,22,80,443,8080,3000-3010",
             )
-        
-        scan_all_ports = st.checkbox("🔥 Modo Full Scan: Escanear todos los puertos (1 - 65535)")
-        
+
+        animal_mode = st.checkbox(
+            "🦁 Modo Animal: Escaneo completo de los 65.535 puertos (1 - 65535) a máxima concurrencia"
+        )
+
         col_opt1, col_opt2 = st.columns(2)
         with col_opt1:
-            concurrency = st.slider("Concurrencia simultánea", min_value=10, max_value=500, value=100, step=10)
+            concurrency = st.slider(
+                "Concurrencia simultánea", min_value=10, max_value=1000, value=150, step=10
+            )
         with col_opt2:
-            timeout = st.slider("Timeout por socket (segundos)", min_value=0.5, max_value=5.0, value=1.5, step=0.5)
+            timeout = st.slider(
+                "Timeout por socket (segundos)", min_value=0.5, max_value=5.0, value=1.5, step=0.5
+            )
 
         submitted = st.form_submit_button("Iniciar Auditoría de Puertos 🚀")
 
@@ -55,88 +72,109 @@ def render_port_scanner_tab():
             st.error("❌ Debes especificar un objetivo válido (IP o Dominio).")
             return
 
-        # 1. Validación Anti-SSRF y resolución DNS
         is_valid, resolved_or_error = validate_target(target_input.strip())
         if not is_valid:
             st.error(f"❌ Objetivo bloqueado por seguridad: {resolved_or_error}")
             return
 
-        # 2. Parseo de puertos
-        if scan_all_ports:
+        if animal_mode:
             ports_list = list(range(1, 65536))
-            st.warning("⚠️ Modo Full Scan activado (65.535 puertos). El escaneo puede demorar unos minutos dependiendo de la concurrencia.")
+            effective_concurrency = max(concurrency, 500)
+            st.warning(
+                f"🦁 Modo Animal activado: auditando 65.535 puertos con concurrencia={effective_concurrency}."
+            )
         else:
+            effective_concurrency = concurrency
             ports_list = parse_port_range(ports_input)
             if not ports_list:
                 st.error("❌ El formato de puertos especificado es inválido.")
                 return
 
-        st.info(f"Target resuelto: **{target_input.strip()}** -> IP: `{resolved_or_error}` | Puertos a auditar: **{len(ports_list)}**")
+        total_ports = len(ports_list)
+        st.info(
+            f"Target resuelto: **{target_input.strip()}** -> IP: `{resolved_or_error}` | "
+            f"Puertos a auditar: **{total_ports}**"
+        )
 
-        results_container = st.container()
         progress_bar = st.progress(0)
         status_text = st.empty()
 
         open_ports_data = []
+        scanned_count = 0
 
-        def handle_open(host, port, banner, service, vulns):
-            risk = "🔴 Alto" if port in [21, 22, 3389, 23] else ("🟡 Medio" if port in [80, 443, 8080, 3000] else "🟢 Bajo")
-            open_ports_data.append({
-                "Puerto": port,
-                "Estado": "Abierto",
-                "Servicio": service,
-                "Riesgo": risk,
-                "Banner / Versión": banner or "Desconocido",
-                "CVEs Asociados": ", ".join(vulns) if vulns else "Ninguno detectado"
-            })
+        def update_progress() -> None:
+            nonlocal scanned_count
+            scanned_count += 1
+            if scanned_count % max(1, total_ports // 100) == 0 or scanned_count == total_ports:
+                progress_bar.progress(min(scanned_count / total_ports, 1.0))
+                status_text.text(f"Progreso: {scanned_count}/{total_ports} puertos evaluados...")
 
-        def handle_close(host, port):
-            pass
+        def handle_open(result: BannerResult) -> None:
+            _host, port, _is_open, banner, service, vulns = result
+            risk = (
+                "🔴 Alto"
+                if port in (21, 22, 23, 445, 3389)
+                else ("🟡 Medio" if port in (80, 443, 3000, 3306, 5432, 6379, 8080) else "🟢 Bajo")
+            )
+            open_ports_data.append(
+                {
+                    "Puerto": port,
+                    "Estado": "Abierto",
+                    "Servicio": service,
+                    "Riesgo": risk,
+                    "Banner / Versión": banner or "Desconocido",
+                    "CVEs / Riesgos": vulns if isinstance(vulns, str) else ", ".join(vulns),
+                }
+            )
+            update_progress()
+
+        def handle_close(_result: PortResult) -> None:
+            update_progress()
 
         scanner = PortScanner(
-            concurrency=concurrency,
+            concurrency=effective_concurrency,
             timeout=timeout,
             on_open=handle_open,
-            on_close=handle_close
+            on_close=handle_close,
         )
 
         start_time = datetime.now()
 
         with st.spinner("🔍 Ejecutando escaneo asíncrono y banner grabbing..."):
             try:
-                # Ejecución segura del bucle de eventos sin pisar el loop global de Streamlit
+                new_loop = asyncio.new_event_loop()
                 try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        new_loop = asyncio.new_event_loop()
-                        try:
-                            new_loop.run_until_complete(scanner.scan_ports(resolved_or_error, ports_list))
-                        finally:
-                            new_loop.close()
-                    else:
-                        loop.run_until_complete(scanner.scan_ports(resolved_or_error, ports_list))
-                except RuntimeError:
-                    new_loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(new_loop)
                     new_loop.run_until_complete(scanner.scan_ports(resolved_or_error, ports_list))
+                finally:
                     new_loop.close()
-
             except Exception as ex:
                 st.error(f"❌ Error crítico durante la ejecución del escáner: {ex}")
                 return
 
         elapsed = (datetime.now() - start_time).total_seconds()
-        st.success(f"✅ Auditoría completada en {elapsed:.2f} segundos.")
+        st.session_state["scanner_last_results"] = sorted(open_ports_data, key=lambda x: x["Puerto"])
+        st.session_state["scanner_last_target"] = target_input.strip()
+        st.session_state["scanner_last_elapsed"] = elapsed
 
-        if open_ports_data:
-            df = pd.DataFrame(open_ports_data)
+    if "scanner_last_results" in st.session_state:
+        results = st.session_state["scanner_last_results"]
+        last_target = st.session_state.get("scanner_last_target", "")
+        elapsed = st.session_state.get("scanner_last_elapsed", 0.0)
+
+        st.success(f"✅ Auditoría sobre `{last_target}` completada en {elapsed:.2f} segundos.")
+
+        if results:
+            df = pd.DataFrame(results)
             st.markdown("### 📊 Puertos Abiertos y Hallazgos")
             st.dataframe(df, use_container_width=True)
 
-            # Resumen Ejecutivo con IA
             if st.button("📝 Generar Informe Ejecutivo con IA (Groq)"):
                 with st.spinner("🤖 Analizando superficie de ataque y redactando informe..."):
-                    prompt_ai = f"Analiza los siguientes puertos abiertos detectados en el objetivo {target_input}:\n{df.to_string()}\nProporciona recomendaciones de hardening y mitigación de riesgos de seguridad."
+                    prompt_ai = (
+                        f"Analiza los siguientes puertos abiertos detectados en el objetivo {last_target}:\n"
+                        f"{df.to_string(index=False)}\n"
+                        "Proporciona recomendaciones técnicas de hardening y mitigación de riesgos."
+                    )
                     ai_report = call_groq_api(prompt_ai)
                     st.markdown("### 📋 Informe de Seguridad (Groq AI)")
                     st.markdown(ai_report)
