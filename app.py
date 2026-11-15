@@ -170,7 +170,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Pestañas principales de navegación unificadas (CORREGIDO)
+# Pestañas principales de navegación unificadas
 tab_ops, tab_self_improve, tab_scanner = st.tabs([
     "⚡ Consola Cognitiva", 
     "🧬 Auto-Mejora & GitHub PRs", 
