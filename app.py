@@ -21,13 +21,11 @@ from config.settings import settings
 # Importación robusta del escáner de puertos con manejo de excepciones detallado
 scanner_available = False
 render_port_scanner_tab = None
-
 try:
     from security.port_scanner.ui import render_port_scanner_tab
     scanner_available = True
 except Exception as e:
     scanner_available = False
-    import traceback
 
 # -----------------------------------------------------------------
 # Estilos CSS - Cyberpunk Minimalista
@@ -88,7 +86,7 @@ def run_async(coro):
         loop = asyncio.get_event_loop()
     except RuntimeError:
         loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+        asyncio.set_event_loop(loop)
     if loop.is_running():
         new_loop = asyncio.new_event_loop()
         try:
@@ -131,7 +129,6 @@ def load_atomum_modular_core():
     else:
         inference_engine = InferenceService(client=StubInferenceClient())
         mode = "Local Stub Engine"
-        
     planner = CognitivePlanner(inference_engine=inference_engine)
     auto_runner = AutonomousRunner()
     return inference_engine, context_svc, planner, auto_runner, mode
@@ -146,10 +143,7 @@ async def execute_modular_pipeline(instruction: str) -> str:
         model_id=model_id,
         payload={
             "messages": [
-                {
-                    "role": "system",
-                    "content": "Eres ATOMUM, un sistema autónomo técnico de alta precisión.",
-                },
+                {"role": "system", "content": "Eres ATOMUM, un sistema autónomo técnico de alta precisión."},
                 {"role": "user", "content": instruction},
             ],
             "plan": plan,
@@ -157,12 +151,13 @@ async def execute_modular_pipeline(instruction: str) -> str:
     )
     if result.get("status") == "error":
         return f"⚠️ Error del motor: {result.get('error_message')}"
+    
     output = (
-        result.get("output")
-        or result.get("response")
-        or result.get("text")
-        or result.get("content")
-        or str(result)
+        result.get("output") or 
+        result.get("response") or 
+        result.get("text") or 
+        result.get("content") or 
+        str(result)
     )
     await context_store.set("last_output", {"response": output})
     return output
@@ -175,7 +170,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Pestañas principales de navegación unificadas
+# Pestañas principales de navegación unificadas (CORREGIDO)
 tab_ops, tab_self_improve, tab_scanner = st.tabs([
     "⚡ Consola Cognitiva", 
     "🧬 Auto-Mejora & GitHub PRs", 
@@ -272,7 +267,7 @@ with tab_self_improve:
             st.info("✅ Parche validado con AST y Pytest en entorno local (PR omitido por configuración).")
         elif status in ("reverted", "blocked", "error"):
             st.warning(f"⚠️ Ciclo detenido ({status}): {res.get('message')}")
-        st.json(res)
+            st.json(res)
 
 # -----------------------------------------------------------------
 # PESTAÑA 3: Escáner de Puertos TCP (Security Suite)
