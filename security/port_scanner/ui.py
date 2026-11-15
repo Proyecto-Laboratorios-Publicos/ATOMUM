@@ -318,18 +318,24 @@ def render_port_scanner_tab() -> None:
                     for r in results:
                         line = f"Port: {r['Puerto']} | Serv: {r['Servicio']} | OS: {r['SO Estimado']} | Risk: {r['Riesgo']}"
                         safe_line = line.encode('latin-1', 'replace').decode('latin-1')
-                        pdf.cell(0, 6, safe_line, ln=True)
+                        pdf.cell(190, 6, safe_line, ln=True)
                     
                     if ai_report_content:
                         pdf.ln(5)
                         pdf.set_font("Arial", "B", 12)
                         pdf.cell(0, 10, "AI Security Recommendations:", ln=True)
                         pdf.set_font("Arial", "", 8)
+                        
+                        # Procesar línea por línea asegurando ancho fijo (w=190) para evitar desbordes
                         for line_text in ai_report_content.split("\n"):
+                            # Si una línea es muy larga, cortarla o sanitizarla
                             safe_text = line_text.encode('latin-1', 'replace').decode('latin-1')
-                            pdf.multi_cell(0, 5, safe_text)
+                            if not safe_text.strip():
+                                pdf.ln(3)
+                                continue
+                            # Usar w=190 en lugar de 0 para forzar el salto de línea dentro de los márgenes
+                            pdf.multi_cell(190, 5, safe_text)
                             
-                    # Obtener directamente los bytes del PDF de forma compatible con fpdf2 moderno
                     pdf_output = pdf.output()
                     if isinstance(pdf_output, str):
                         pdf_output = pdf_output.encode('latin-1')
