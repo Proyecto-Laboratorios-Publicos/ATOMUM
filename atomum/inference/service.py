@@ -31,11 +31,15 @@ class InferenceService(InferenceEngine):
     async def run(self, model_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
         Orquesta y valida la ejecución de la inferencia a través del motor configurado.
-        Devuelve un diccionario con el resultado o con información estructurada de error.
+        Fuerza globalmente el uso del modelo activo para evitar llamadas a modelos deprecados.
         """
+        from config.settings import settings
+        # Forzamos el modelo activo configurado en settings
+        active_model = settings.MODEL_Name if hasattr(settings, "MODEL_Name") else settings.MODEL_NAME
+
         # Validaciones previas de negocio o sanitización del payload si fuera necesario
-        if not model_id:
-            error_msg = "El parámetro 'model_id' es obligatorio."
+        if not payload:
+            error_msg = "El payload está vacío."
             logger.error(error_msg)
             return {"status": "error", "error_message": error_msg}
 
@@ -46,11 +50,10 @@ class InferenceService(InferenceEngine):
             return {"status": "error", "error_message": error_msg}
 
         try:
-            # Ejecución delegada al cliente subyacente
-            result = await self.client.run(model_id, payload)
+            # Ejecución delegada al cliente subyacente usando el modelo forzado
+            result = await self.client.run(active_model, payload)
             return result
         except ConnectionError as exc:
-            # Fallos de red o de conexión al endpoint de Groq
             logger.exception("Error de conexión al intentar ejecutar la inferencia.")
             return {
                 "status": "error",
@@ -58,7 +61,6 @@ class InferenceService(InferenceEngine):
                 "error_message": str(exc) or "Error de conexión al servicio de inferencia.",
             }
         except TimeoutError as exc:
-            # Tiempo de espera excedido
             logger.exception("Timeout al ejecutar la inferencia.")
             return {
                 "status": "error",
@@ -66,7 +68,6 @@ class InferenceService(InferenceEngine):
                 "error_message": str(exc) or "La solicitud de inferencia excedió el tiempo máximo permitido.",
             }
         except RuntimeError as exc:
-            # Posibles errores específicos de la API de Groq (p.ej., límite de cuota)
             logger.exception("Error de runtime al ejecutar la inferencia.")
             return {
                 "status": "error",
@@ -74,7 +75,6 @@ class InferenceService(InferenceEngine):
                 "error_message": str(exc) or "Error interno del motor de inferencia.",
             }
         except Exception as exc:
-            # Captura genérica para cualquier otro problema inesperado
             logger.exception("Error inesperado durante la inferencia.")
             return {
                 "status": "error",
