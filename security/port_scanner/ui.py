@@ -3,10 +3,14 @@
 Componente de interfaz visual para el Escáner de Puertos TCP de ATOMUM.
 Diseñado para integrarse perfectamente en Streamlit con métricas y ejecución asíncrona.
 """
+# security/port_scanner/ui.py
 import asyncio
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+
+from .core import PortScanner
+from .utils import validate_target, parse_port_range
 
 # Importación directa desde los submódulos hermanos del paquete
 from security.port_scanner.core import PortScanner
