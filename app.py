@@ -11,6 +11,7 @@ from atomum.inference.service import InferenceService
 from atomum.inference.stub_inference import StubInferenceClient
 from atomum.planning.planner import CognitivePlanner
 from runner import AutonomousRunner
+from config.settings import settings
 
 # -----------------------------------------------------------------
 # Estilos CSS - Cyberpunk Minimalista
@@ -134,7 +135,7 @@ async def execute_modular_pipeline(instruction: str) -> str:
     # 2. Generar plan de ejecución
     plan = await planner.create_plan(instruction, {"source": "streamlit_ui"})
 
-    model_id = os.getenv("ATOMUM_LLM_MODEL", "openai/gpt-oss-120b")
+    model_id = os.getenv("ATOMUM_LLM_MODEL", settings.MODEL_NAME)
 
     # 3. Ejecutar inferencia modular en formato messages
     result = await inference.run(
