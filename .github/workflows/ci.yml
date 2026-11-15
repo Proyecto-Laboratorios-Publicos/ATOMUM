@@ -1,41 +1,33 @@
-name: ATOMUM Modular CI
+import asyncio
+import json
+from pathlib import Path
+from atomum.context.service import ContextService
+from atomum.core.logger import get_logger
 
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+logger = get_logger("atomum.migration")
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+async def migrate_legacy_memory(legacy_dir: str = "memory") -> None:
+    """Migra registros JSON desde el directorio legado hacia ContextService."""
+    source_path = Path(legacy_dir)
+    if not source_path.exists() or not source_path.is_dir():
+        logger.warning(f"Directorio legado '{legacy_dir}' no encontrado. Nada que migrar.")
+        return
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+    context_service = ContextService()
+    migrated_count = 0
 
-      - name: Install Poetry and dependencies
-        run: |
-          pip install --upgrade pip poetry
-          poetry config virtualenvs.create false
-          poetry install --no-root --no-interaction --no-ansi
+    for json_file in source_path.glob("*.json"):
+        try:
+            with open(json_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            key = f"legacy:{json_file.stem}"
+            await context_service.set(key, data)
+            migrated_count += 1
+            logger.info(f"Migrado correctamente: {json_file.name} -> {key}")
+        except Exception as e:
+            logger.error(f"Error migrando {json_file.name}: {e}")
 
-      - name: Run unit and integration tests
-        env:
-          GROQ_API_KEY: "test_stub_key"
-        run: |
-          pytest -v
+    logger.info(f"Migración finalizada. Total de registros transferidos: {migrated_count}")
 
-  docker-build:
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Validate Docker build
-        run: docker build -t atomum-core:ci .
+if __name__ == "__main__":
+    asyncio.run(migrate_legacy_memory())
