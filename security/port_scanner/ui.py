@@ -140,7 +140,7 @@ def render_port_scanner_tab() -> None:
                 status_text.text(f"Progreso: {scanned_count}/{total_ports} puertos evaluados...")
 
         def handle_open(result: BannerResult) -> None:
-            _host, port, _is_open, banner, service, vulns = result
+            _host, port, _is_open, banner, service, os_guess, vulns = result
             risk = (
                 "🔴 Alto"
                 if port in (21, 22, 23, 445, 3389)
@@ -151,6 +151,7 @@ def render_port_scanner_tab() -> None:
                     "Puerto": port,
                     "Estado": "Abierto",
                     "Servicio": service,
+                    "SO Estimado": os_guess,
                     "Riesgo": risk,
                     "Banner / Versión": banner or "Desconocido",
                     "CVEs / Riesgos": vulns if isinstance(vulns, str) else ", ".join(vulns),
