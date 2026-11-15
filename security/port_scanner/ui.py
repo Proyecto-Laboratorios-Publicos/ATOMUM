@@ -8,8 +8,9 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-from .core import PortScanner
-from .utils import validate_target, parse_port_range
+# Importación directa desde los submódulos hermanos del paquete
+from security.port_scanner.core import PortScanner
+from security.port_scanner.utils import validate_target, parse_port_range
 
 def render_port_scanner_tab():
     """
