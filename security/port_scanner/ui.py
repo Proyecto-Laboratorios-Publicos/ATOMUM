@@ -284,7 +284,6 @@ def render_port_scanner_tab() -> None:
                     from docx import Document
                     doc = Document()
                     
-                    # Encabezado principal del documento
                     doc.add_heading(f"Reporte de Auditoría ATOMUM: {last_target}", 0)
                     doc.add_paragraph(f"Fecha de ejecución: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                     doc.add_paragraph(f"Tiempo de escaneo: {elapsed:.2f} segundos")
@@ -301,12 +300,15 @@ def render_port_scanner_tab() -> None:
                     if ai_report_content:
                         doc.add_heading("Informe Ejecutivo y Hardening (Groq AI)", level=1)
                         
-                        # Procesar línea por línea el reporte de IA para darle formato limpio en Word
                         for line_text in ai_report_content.split("\n"):
+                            # Si es una línea de tabla Markdown de la sección 5, la procesamos y formateamos en lugar de omitirla
                             if line_text.strip().startswith("|"):
+                                parts = [p.strip() for p in line_text.split("|") if p.strip()]
+                                if len(parts) >= 4 and "Prioridad" not in parts[0] and "---" not in parts[0]:
+                                    row_str = f"• [{parts[0]}] {parts[1]} (Responsable: {parts[2]} | Plazo: {parts[3]})"
+                                    doc.add_paragraph(row_str)
                                 continue
                             
-                            # Limpiar asteriscos y símbolos extraños
                             cleaned_text = re.sub(r'[*#_`]', '', line_text)
                             cleaned_text = (
                                 cleaned_text.replace('→', '->')
@@ -320,11 +322,10 @@ def render_port_scanner_tab() -> None:
                             if not cleaned_text.strip():
                                 continue
                             
-                            # Si detectamos que es un título numerado (ej: "1. Resumen Ejecutivo"), usar Heading nivel 2
-                            if any(cleaned_text.strip().startswith(prefix) for prefix in ["1.", "2.", "3.", "4.", "Conclusión"]):
+                            if any(cleaned_text.strip().startswith(prefix) for prefix in ["1.", "2.", "3.", "4.", "5.", "Conclusión"]):
                                 doc.add_heading(cleaned_text.strip(), level=2)
                             elif cleaned_text.strip().startswith("-") or cleaned_text.strip().startswith("•"):
-                                doc.add_paragraph(cleaned_text.strip(), style='List Bullet')
+                                doc.add_paragraph(cleaned_text.strip().lstrip("- •"), style='List Bullet')
                             else:
                                 doc.add_paragraph(cleaned_text.strip())
                     
@@ -345,7 +346,6 @@ def render_port_scanner_tab() -> None:
                     pdf = FPDF()
                     pdf.add_page()
                     
-                    # Definir márgenes limpios de 10mm
                     pdf.set_margins(left=10, top=10, right=10)
                     
                     pdf.set_font("Arial", "B", 16)
@@ -370,8 +370,13 @@ def render_port_scanner_tab() -> None:
                         pdf.set_font("Arial", "", 8)
                         
                         for line_text in ai_report_content.split("\n"):
+                            # Procesar filas de tabla en el PDF sin perder información
                             if line_text.strip().startswith("|"):
-                                continue
+                                parts = [p.strip() for p in line_text.split("|") if p.strip()]
+                                if len(parts) >= 4 and "Prioridad" not in parts[0] and "---" not in parts[0]:
+                                    line_text = f"- [{parts[0]}] {parts[1]} (Resp: {parts[2]} | Plazo: {parts[3]})"
+                                else:
+                                    continue
                             
                             cleaned_text = re.sub(r'[*#_`]', '', line_text)
                             cleaned_text = (
@@ -390,7 +395,6 @@ def render_port_scanner_tab() -> None:
                                 pdf.ln(3)
                                 continue
                             
-                            # ¡CLAVE! Resetear siempre el cursor X al margen izquierdo (10mm) antes de escribir
                             pdf.set_x(10)
                             
                             if len(safe_text.strip()) < 65 and not safe_text.strip().endswith('.'):
