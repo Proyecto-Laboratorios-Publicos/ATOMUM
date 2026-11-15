@@ -357,13 +357,15 @@ def render_port_scanner_tab() -> None:
                                 pdf.ln(3)
                                 continue
                             
-                            # Usar un ancho fijo de 190 (exactamente el ancho útil de la hoja A4 con márgenes de 10mm)
+                            # ¡CLAVE! Resetear siempre el cursor X al margen izquierdo (10mm) antes de escribir
+                            pdf.set_x(10)
+                            
                             if len(safe_text.strip()) < 65 and not safe_text.strip().endswith('.'):
                                 pdf.set_font("Arial", "B", 9)
-                                pdf.multi_cell(190, 5, safe_text.strip())
+                                pdf.multi_cell(190, 5, safe_text.strip(), new_x="LMARGIN", new_y="NEXT")
                                 pdf.set_font("Arial", "", 8)
                             else:
-                                pdf.multi_cell(190, 5, safe_text)
+                                pdf.multi_cell(190, 5, safe_text.strip(), new_x="LMARGIN", new_y="NEXT")
                             
                     pdf_output = bytes(pdf.output())
 
