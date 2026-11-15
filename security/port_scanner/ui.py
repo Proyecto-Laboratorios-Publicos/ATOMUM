@@ -336,12 +336,21 @@ def render_port_scanner_tab() -> None:
                             if line_text.strip().startswith("|"):
                                 continue
                             
-                            # Limpiar formato Markdown, flechas y espacios invisibles Unicode
+                            # Limpieza total de caracteres especiales que rompen latin-1
                             cleaned_text = re.sub(r'[*#_`]', '', line_text)
-                            cleaned_text = cleaned_text.replace('→', '->').replace('≥', '>=').replace('‑', '-')
+                            cleaned_text = (
+                                cleaned_text.replace('→', '->')
+                                .replace('–', '-')
+                                .replace('—', '-')
+                                .replace('•', '-')
+                                .replace('≥', '>=')
+                                .replace('‑', '-')
+                            )
                             cleaned_text = cleaned_text.replace('\u202f', ' ').replace('\u00a0', ' ')
                             
+                            # Forzar reemplazo seguro de cualquier otro símbolo extraño por guion o espacio
                             safe_text = cleaned_text.encode('latin-1', 'replace').decode('latin-1')
+                            
                             if not safe_text.strip():
                                 pdf.ln(3)
                                 continue
