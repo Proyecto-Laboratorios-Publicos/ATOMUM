@@ -413,7 +413,7 @@ def render_port_scanner_tab() -> None:
                     )
                 except ImportError:
                     st.warning("⚠️ La librería `fpdf2` no está disponible en el entorno.")
-            elif export_format == "HTML Interactivo (.html)":
+        elif export_format == "HTML Interactivo (.html)":
             try:
                 # Calcular métricas KPI para el resumen superior
                 total_ports_count = len(results)
@@ -472,7 +472,6 @@ def render_port_scanner_tab() -> None:
             font-size: 26px;
             margin: 0;
         }}
-        /* KPI Cards */
         .kpi-container {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -549,7 +548,6 @@ def render_port_scanner_tab() -> None:
         .risk-med {{ background: rgba(210, 153, 34, 0.15); color: var(--risk-med); border: 1px solid var(--risk-med); }}
         .risk-low {{ background: rgba(63, 185, 80, 0.15); color: var(--risk-low); border: 1px solid var(--risk-low); }}
         
-        /* Contenedor IA con Botón de Copiado */
         .ai-wrapper {{
             position: relative;
             margin-top: 15px;
@@ -584,7 +582,6 @@ def render_port_scanner_tab() -> None:
             max-height: 600px;
             overflow-y: auto;
         }}
-        /* Estilos de Acordeón */
         .collapsible-content {{
             overflow: hidden;
             transition: max-height 0.3s ease-out;
@@ -630,7 +627,6 @@ def render_port_scanner_tab() -> None:
             </div>
         </header>
 
-        <!-- KPI Cards -->
         <div class="kpi-container">
             <div class="kpi-card">
                 <div class="kpi-title">Puertos Abiertos</div>
