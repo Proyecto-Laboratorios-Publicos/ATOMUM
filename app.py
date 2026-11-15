@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from atomum.context.service import ContextService
 from atomum.inference.service import InferenceService
-from atomum.inference.stub_inference import StubInferenceEngine
+from atomum.inference.stub_inference import StubInference
 from atomum.planning.planner import Planner
 
 # -----------------------------------------------------------------
