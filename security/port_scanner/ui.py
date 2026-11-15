@@ -413,7 +413,7 @@ def render_port_scanner_tab() -> None:
                     )
                 except ImportError:
                     st.warning("⚠️ La librería `fpdf2` no está disponible en el entorno.")
-        elif export_format == "HTML Interactivo (.html)":
+elif export_format == "HTML Interactivo (.html)":
             try:
                 # Calcular métricas KPI para el resumen superior
                 total_ports_count = len(results)
