@@ -1,10 +1,11 @@
 # security/port_scanner/ui.py
 """
 Interfaz visual para el Escáner de Puertos TCP de ATOMUM con Banner Grabbing,
-correlación de CVEs, criticidad por colores y Resumen Ejecutivo con IA (Groq).
+resolución previa de DNS, correlación de CVEs, criticidad por colores y Resumen Ejecutivo con IA (Groq).
 """
 import asyncio
 import os
+import socket
 from datetime import datetime
 import pandas as pd
 import streamlit as st
@@ -39,7 +40,7 @@ except ImportError:
 def render_port_scanner_tab() -> None:
     st.subheader("🛡️ Escáner de Puertos, Banners & Auditoría de Vulnerabilidades")
     st.markdown(
-        "Auditoría asíncrona TCP con banner grabbing en doble pasada, "
+        "Auditoría asíncrona TCP con resolución previa de DNS, banner grabbing en doble pasada, "
         "clasificación de riesgo y análisis ejecutivo asistido por IA."
     )
 
@@ -52,7 +53,7 @@ def render_port_scanner_tab() -> None:
             )
         with col2:
             ports_input = st.text_input(
-                "Puertos a escanear (Modo Estándar / Sigiloso)",
+                "Puertos a escanear (Modo Estándar / Personalizado)",
                 value="21,22,80,443,8080,3000-3010",
             )
 
@@ -61,7 +62,7 @@ def render_port_scanner_tab() -> None:
             options=[
                 "⚡ Estándar / Personalizado (Rango definido arriba)",
                 "🚀 Full Scan (Todos los 65.535 puertos a alta concurrencia)",
-                "🦁 Modo Animal / Sigiloso (Baja concurrencia y mayor timeout para evitar bloqueos)",
+                "🦁 Modo Animal / Sigiloso (Barrido completo de 65.535 puertos con baja concurrencia y mayor timeout)",
             ],
             index=0,
         )
@@ -87,14 +88,35 @@ def render_port_scanner_tab() -> None:
         submitted = st.form_submit_button("Iniciar Auditoría de Puertos 🚀")
 
     if submitted:
-        if not target_input.strip():
+        raw_target = target_input.strip()
+        if not raw_target:
             st.error("❌ Debes especificar un objetivo válido (IP o Dominio).")
             return
 
-        is_valid, resolved_or_error = validate_target(target_input.strip())
+        is_valid, resolved_or_error = validate_target(raw_target)
         if not is_valid:
             st.error(f"❌ Objetivo bloqueado por seguridad: {resolved_or_error}")
             return
+
+        # 🌐 Reconocimiento previo de DNS y metadatos de red antes del escaneo
+        with st.spinner("🌐 Resolviendo registros DNS y metadatos del objetivo..."):
+            dns_info = {}
+            try:
+                ip_info = socket.gethostbyname_ex(raw_target)
+                dns_info["Canonical Name"] = ip_info[0]
+                dns_info["Aliases"] = ip_info[1]
+                dns_info["IPs Asociadas"] = ip_info[2]
+            except Exception:
+                dns_info["IPs Asociadas"] = [resolved_or_error]
+
+        st.markdown("### 🌐 Reconocimiento Preliminar de Red (DNS)")
+        col_dns1, col_dns2 = st.columns(2)
+        with col_dns1:
+            st.info(f"**Objetivo Ingresado:** `{raw_target}`\n\n**IP Principal Resuelta:** `{resolved_or_error}`")
+        with col_dns2:
+            aliases_str = ", ".join(dns_info.get("Aliases", [])) or "Ninguno"
+            ips_str = ", ".join(dns_info.get("IPs Asociadas", [resolved_or_error]))
+            st.markdown(f"**Aliases / CNAME:** `{aliases_str}`\n\n**Todas las IPs:** `{ips_str}`")
 
         if "Full Scan" in scan_profile:
             ports_list = list(range(1, 65536))
@@ -104,7 +126,6 @@ def render_port_scanner_tab() -> None:
                 f"🚀 Full Scan activado: auditando los 65.535 puertos a velocidad máxima (concurrencia={effective_concurrency})."
             )
         elif "Modo Animal" in scan_profile:
-            # El Modo Animal ahora barre los 65.535 puertos de forma sigilosa y robusta
             ports_list = list(range(1, 65536))
             effective_concurrency = min(concurrency, 15)
             effective_timeout = max(timeout, 3.0)
@@ -121,10 +142,7 @@ def render_port_scanner_tab() -> None:
                 return
 
         total_ports = len(ports_list)
-        st.info(
-            f"Target resuelto: **{target_input.strip()}** -> IP: `{resolved_or_error}` | "
-            f"Puertos a auditar: **{total_ports}**"
-        )
+        st.info(f"Puertos totales configurados para auditar en `{resolved_or_error}`: **{total_ports}**")
 
         progress_bar = st.progress(0)
         status_text = st.empty()
@@ -184,7 +202,7 @@ def render_port_scanner_tab() -> None:
 
         elapsed = (datetime.now() - start_time).total_seconds()
         st.session_state["scanner_last_results"] = sorted(open_ports_data, key=lambda x: x["Puerto"])
-        st.session_state["scanner_last_target"] = target_input.strip()
+        st.session_state["scanner_last_target"] = raw_target
         st.session_state["scanner_last_elapsed"] = elapsed
 
     if "scanner_last_results" in st.session_state:
