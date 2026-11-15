@@ -1,11 +1,16 @@
-import streamlit as st
-import sys
+import asyncio
 import os
+import sys
+import streamlit as st
 
 # Asegurar rutas absolutas exactas para importar los módulos de Atomum
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from core.engine import AtomumEngine
-from memory.context_manager import ContextManager
+
+from atomum.context.service import ContextService
+from atomum.inference.groq_client import GroqClient
+from atomum.inference.service import InferenceService
+from atomum.inference.stub_inference import StubInferenceEngine
+from atomum.planning.planner import Planner
 
 # -----------------------------------------------------------------
 # Estilos CSS - Cyberpunk Minimalista
@@ -57,64 +62,122 @@ pre {
 }
 """
 
+
 def inject_css(css: str) -> None:
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+
+
+def run_async(coro):
+    """Ejecuta corrutinas del núcleo modular dentro de Streamlit de forma segura."""
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    if loop.is_running():
+        new_loop = asyncio.new_event_loop()
+        try:
+            return new_loop.run_until_complete(coro)
+        finally:
+            new_loop.close()
+    return loop.run_until_complete(coro)
+
 
 # Configuración de la página con layout amplio
 st.set_page_config(
     page_title="ATOMUM - Centro de Control Autónomo",
     page_icon="🤖",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed",
 )
 
 # Inyectar estilos cyberpunk
 inject_css(CYBERPUNK_CSS)
 
-# Inicializar componentes principales en caché de sesión
-@st.cache_resource
-def load_atomum_core():
-    return AtomumEngine(), ContextManager()
 
-engine, memory = load_atomum_core()
+# Inicializar componentes modulares en caché de sesión
+@st.cache_resource
+def load_atomum_modular_core():
+    context_svc = ContextService()
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if api_key and api_key != "test_stub_key":
+        inference_engine = InferenceService(client=GroqClient(api_key=api_key))
+        mode = "Groq Cloud Engine"
+    else:
+        inference_engine = StubInferenceEngine()
+        mode = "Local Stub Engine"
+    planner = Planner()
+    return inference_engine, context_svc, planner, mode
+
+
+inference, context_store, planner, active_mode = load_atomum_modular_core()
+
+
+async def execute_modular_pipeline(instruction: str) -> str:
+    # 1. Registrar directiva entrante en ContextStore
+    await context_store.set("last_instruction", {"prompt": instruction})
+
+    # 2. Generar plan de ejecución
+    plan = await planner.create_plan(instruction, {"source": "streamlit_ui"})
+
+    # 3. Ejecutar inferencia modular
+    result = await inference.run(
+        model_id="llama-3.3-70b-versatile",
+        payload={"prompt": instruction, "plan": plan},
+    )
+
+    # 4. Extraer respuesta limpia y persistir en contexto
+    output = (
+        result.get("output")
+        or result.get("response")
+        or result.get("text")
+        or str(result)
+    )
+    await context_store.set("last_output", {"response": output})
+    return output
+
 
 # Interfaz visual principal envuelta en tarjeta estilizada
-st.markdown("""
-<div class="card">
-    <h1 style="color:var(--accent);margin-top:0;">🤖 ATOMUM: Centro de Control Autónomo</h1>
-    <p>Panel de operaciones en tiempo real. Envía una directiva para que el núcleo cognitivo y los guardarraíses constitucionales la procesen.</p>
-</div>
-""", unsafe_allow_html=True)
+st.markdown(
+    """
+    <div class="card">
+        <h1 style="color:var(--accent);margin-top:0;">🤖 ATOMUM: Centro de Control Autónomo</h1>
+        <p>Panel de operaciones en tiempo real. Envía una directiva para que el núcleo cognitivo modular y los guardarraíses constitucionales la procesen.</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 # Formulario de entrada de directivas
 with st.form("command_form"):
-    user_input = st.text_input("Ingresá tu instrucción o comando técnico:", placeholder="Ej: genera un esquema en Python...")
+    user_input = st.text_input(
+        "Ingresá tu instrucción o comando técnico:",
+        placeholder="Ej: genera un esquema en Python...",
+    )
     submitted = st.form_submit_button("Ejecutar Directiva ⚡")
 
 if submitted and user_input:
-    with st.spinner("🧠 Procesando directiva a través del motor cognitivo..."):
-        # Registrar evento de inicio en memoria
-        memory.log_event("WEB_APP_INSTRUCTION", f"Instrucción recibida: {user_input}")
-        
-        # Procesar a través del motor de Atomum/Groq
-        response_output = engine.process_instruction(user_input)
-        
-        # Guardar en session_state para mantener la respuesta visible tras clics
-        st.session_state["last_response"] = response_output
-        st.session_state["last_input"] = user_input
-        
-        # Registrar evento de procesamiento exitoso
-        memory.log_event("WEB_APP_PROCESSED", f"Instrucción procesada correctamente: {user_input}")
+    with st.spinner("🧠 Procesando directiva a través del núcleo modular..."):
+        try:
+            response_output = run_async(execute_modular_pipeline(user_input))
+            st.session_state["last_response"] = response_output
+            st.session_state["last_input"] = user_input
+        except Exception as exc:
+            st.error(f"Error en el núcleo modular: {exc}")
 
 # Renderizar de forma persistente la última respuesta si existe en la sesión
 if "last_response" in st.session_state:
-    st.markdown("""
-    <div class="card">
-        <h3 style="color:var(--accent);">🧠 Respuesta del Núcleo Cognitivo</h3>
-    </div>
-    """, unsafe_allow_html=True)
-    
+    st.markdown(
+        """
+        <div class="card">
+            <h3 style="color:var(--accent);">🧠 Respuesta del Núcleo Cognitivo</h3>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     st.markdown(st.session_state["last_response"])
 
 st.markdown("---")
-st.markdown("🧬 *ATOMUM Core v1.0 | Operativo y Sincronizado con Groq*")
+st.markdown(
+    f"🧬 *ATOMUM Modular Core v2.0 | Motor Activo: {active_mode}*"
+)
