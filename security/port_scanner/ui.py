@@ -381,16 +381,12 @@ def render_port_scanner_tab() -> None:
                     st.warning("⚠️ La librería `fpdf2` no está disponible en el entorno.")
 
             elif export_format == "HTML Interactivo (.html)":
-            try:
-                total_ports_count = len(results)
-                high_risks_count = sum(1 for r in results if "ALTO" in r['Riesgo'].upper() or "🔴" in r['Riesgo'])
-                med_low_count = total_ports_count - high_risks_count
-                
-                # Calcular porcentajes para la barra de distribución visual
-                high_pct = (high_risks_count / total_ports_count * 100) if total_ports_count > 0 else 0
-                med_low_pct = 100 - high_pct if total_ports_count > 0 else 0
+                try:
+                    total_ports_count = len(results)
+                    high_risks_count = sum(1 for r in results if "ALTO" in r['Riesgo'].upper() or "🔴" in r['Riesgo'])
+                    med_low_count = total_ports_count - high_risks_count
 
-                html_content = f"""<!DOCTYPE html>
+                    html_content = f"""<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -441,12 +437,11 @@ def render_port_scanner_tab() -> None:
             font-size: 26px;
             margin: 0;
         }}
-        /* KPI Cards */
         .kpi-container {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 15px;
-            margin-bottom: 20px;
+            margin-bottom: 30px;
         }}
         .kpi-card {{
             background: var(--bg-hover);
@@ -469,36 +464,6 @@ def render_port_scanner_tab() -> None:
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }}
-        /* Barra de distribución visual de riesgos */
-        .risk-distribution-bar {{
-            display: flex;
-            height: 10px;
-            border-radius: 6px;
-            overflow: hidden;
-            background: var(--border-color);
-            margin-bottom: 30px;
-            gap: 2px;
-        }}
-        .bar-high {{ background: var(--risk-high); width: {high_pct}%; transition: width 0.5s; }}
-        .bar-safe {{ background: var(--risk-low); width: {med_low_pct}%; transition: width 0.5s; }}
-
-        /* Buscador en tiempo real */
-        .search-box {{
-            width: 100%;
-            padding: 12px 16px;
-            background: var(--bg-main);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            color: var(--text-main);
-            font-size: 14px;
-            margin-bottom: 20px;
-            box-sizing: border-box;
-        }}
-        .search-box:focus {{
-            outline: none;
-            border-color: var(--accent-blue);
-        }}
-
         h2 {{
             color: #7ee787;
             font-size: 18px;
@@ -547,7 +512,6 @@ def render_port_scanner_tab() -> None:
         .risk-high {{ background: rgba(248, 81, 73, 0.15); color: var(--risk-high); border: 1px solid var(--risk-high); }}
         .risk-med {{ background: rgba(210, 153, 34, 0.15); color: var(--risk-med); border: 1px solid var(--risk-med); }}
         .risk-low {{ background: rgba(63, 185, 80, 0.15); color: var(--risk-low); border: 1px solid var(--risk-low); }}
-        
         .ai-wrapper {{
             position: relative;
             margin-top: 15px;
@@ -612,18 +576,6 @@ def render_port_scanner_tab() -> None:
                 setTimeout(function() {{ btn.innerText = "📋 Copiar Informe"; }}, 2000);
             }});
         }}
-        function filterPorts() {{
-            var input = document.getElementById("portSearchInput").value.toLowerCase();
-            var cards = document.getElementsByClassName("port-card");
-            for (var i = 0; i < cards.length; i++) {{
-                var text = cards[i].innerText.toLowerCase();
-                if (text.indexOf(input) > -1) {{
-                    cards[i].style.display = "flex";
-                }} else {{
-                    cards[i].style.display = "none";
-                }}
-            }}
-        }}
     </script>
 </head>
 <body>
@@ -639,7 +591,6 @@ def render_port_scanner_tab() -> None:
             </div>
         </header>
 
-        <!-- KPI Cards -->
         <div class="kpi-container">
             <div class="kpi-card">
                 <div class="kpi-title">Puertos Abiertos</div>
@@ -655,39 +606,30 @@ def render_port_scanner_tab() -> None:
             </div>
         </div>
 
-        <!-- Barra de Distribución Visual de Riesgos -->
-        <div class="risk-distribution-bar" title="Distribución de Riesgo: Rojo (Alto), Verde (Moderado/Bajo)">
-            <div class="bar-high"></div>
-            <div class="bar-safe"></div>
-        </div>
-
         <h2 onclick="toggleSection('portsSection')">📊 Puertos Abiertos y Hallazgos <span>▼</span></h2>
         <div id="portsSection" class="collapsible-content" style="max-height: 1000px;">
-            <div style="margin-top: 15px;">
-                <input type="text" id="portSearchInput" class="search-box" onkeyup="filterPorts()" placeholder="🔍 Filtrar puertos por número, servicio o versión (ej. 21, ssh, ftp)...">
-            </div>
-            <div class="port-grid">
+            <div class="port-grid" style="margin-top: 15px;">
 """
-                for r in results:
-                    risk_val = r['Riesgo']
-                    css_risk = "risk-high" if "ALTO" in risk_val.upper() or "🔴" in risk_val else ("risk-med" if "MEDIO" in risk_val.upper() or "🟡" in risk_val else "risk-low")
-                    clean_risk_text = risk_val.replace('🔴 ', '').replace('🟡 ', '').replace('🟢 ', '')
-                    
-                    html_content += f"""                <div class="port-card">
+                    for r in results:
+                        risk_val = r['Riesgo']
+                        css_risk = "risk-high" if "ALTO" in risk_val.upper() or "🔴" in risk_val else ("risk-med" if "MEDIO" in risk_val.upper() or "🟡" in risk_val else "risk-low")
+                        clean_risk_text = risk_val.replace('🔴 ', '').replace('🟡 ', '').replace('🟢 ', '')
+                        
+                        html_content += f"""                <div class="port-card">
                     <div>
                         <span class="port-badge">Puerto {r['Puerto']} ({r['Servicio']})</span><br>
-                        <span style="font-size: 13.5px; color: var(--text-muted);">SO Estimado: {r['SO Estimado']} | Versión: {r['Banner / Versión']}</span>
+                        <span style="font-size: 13px; color: var(--text-muted);">SO Estimado: {r['SO Estimado']} | Versión: {r['Banner / Versión']}</span>
                     </div>
                     <div>
                         <span class="risk-tag {css_risk}">{clean_risk_text}</span>
                     </div>
                 </div>\n"""
 
-                html_content += """            </div>
+                    html_content += """            </div>
         </div>\n"""
 
-                if ai_report_content:
-                    html_content += f"""        <h2 onclick="toggleSection('aiSection')" style="margin-top: 25px;">🤖 Informe Ejecutivo y Hardening (Groq AI) <span>▼</span></h2>
+                    if ai_report_content:
+                        html_content += f"""        <h2 onclick="toggleSection('aiSection')" style="margin-top: 25px;">🤖 Informe Ejecutivo y Hardening (Groq AI) <span>▼</span></h2>
         <div id="aiSection" class="collapsible-content" style="max-height: 2000px;">
             <div class="ai-wrapper">
                 <button id="copyBtn" class="copy-btn" onclick="copyAiReport()">📋 Copiar Informe</button>
@@ -695,20 +637,20 @@ def render_port_scanner_tab() -> None:
             </div>
         </div>\n"""
 
-                html_content += f"""        <footer>
+                    html_content += f"""        <footer>
             ATOMUM Modular Core v2.0 &bull; Motor Activo: Groq Cloud Engine &bull; Auditoría Autónoma de Seguridad
         </footer>
     </div>
 </body>
 </html>"""
 
-                st.download_button(
-                    label="⬇️ Descargar Reporte HTML Corporativo Avanzado (.html)",
-                    data=html_content.encode('utf-8'),
-                    file_name=f"atomum_audit_{last_target}.html",
-                    mime="text/html"
-                )
-            except Exception as e:
-                st.error(f"⚠️ Error generando el reporte HTML corporativo: {e}")
+                    st.download_button(
+                        label="⬇️ Descargar Reporte HTML Corporativo Avanzado (.html)",
+                        data=html_content.encode('utf-8'),
+                        file_name=f"atomum_audit_{last_target}.html",
+                        mime="text/html"
+                    )
+                except Exception as e:
+                    st.error(f"⚠️ Error generando el reporte HTML corporativo: {e}")
         else:
             st.info("🛡️ No se detectaron puertos abiertos en el rango seleccionado para este objetivo.")
