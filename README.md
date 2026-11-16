@@ -12,17 +12,26 @@ ATOMUM es un núcleo cognitivo autónomo y motor de orquestación de agentes dis
 
 El ecosistema opera bajo una separación estricta de responsabilidades:
 
+```text
 +-------------------+          +---------------------+
 |  ATOMUM Engine    |  <--->   |  AsyncHttpClient    |
 |  - Orquestación   |          |  - aiohttp.Session  |
 |  - Guardarraíses  |          |  - Retry Exponencial|
 +-------------------+          +---------------------+
-^                               ^
-|                               |
-+-------v-------+               +-------v-------+
-|  Guardrails   |               |   Groq SDK    |
-|  (Seguridad)  |               | (Motor LLM)   |
-+---------------+               +---------------+
+          ^                              ^
+          |                              |
++---------v-------+            +---------v-------+
+|  Guardrails     |            |   Groq SDK      |
+|  (Seguridad)    |            | (Motor LLM)     |
++-----------------+            +-----------------+
+          |
+          +----------------------------+
+                                       |
+                               +-------v-------+
+                               |  PortScanner  |
+                               |  & Audit UI   |
+                               +---------------+
+```
 
 ---
 
