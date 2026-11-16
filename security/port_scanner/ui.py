@@ -1,9 +1,9 @@
-# security/port_scanner/ui.py
 """
 Interfaz visual para el Escáner de Puertos TCP de ATOMUM con Banner Grabbing,
-resolución previa de DNS, correlación de CVEs, criticidad por colores, Resumen Ejecutivo con IA (Groq)
-y Exportación Multiformato (CSV, JSON, Word, PDF,HTML).
+resolución previa de DNS, correlación de CVEs, criticidad por colores,
+Resumen Ejecutivo con IA (Groq) y Exportación Multiformato (CSV, JSON, Word, PDF, HTML).
 """
+
 import asyncio
 import os
 import socket
@@ -28,9 +28,7 @@ except ImportError:
             from groq import Groq
             from config.settings import settings
             client = Groq(api_key=api_key)
-            target_model = os.getenv(
-                "ATOMUM_LLM_MODEL", getattr(settings, "MODEL_NAME", "llama3-70b-8192")
-            )
+            target_model = os.getenv("ATOMUM_LLM_MODEL", getattr(settings, "MODEL_NAME", "llama3-70b-8192"))
             resp = client.chat.completions.create(
                 model=target_model,
                 messages=[{"role": "user", "content": prompt}],
@@ -75,18 +73,12 @@ def render_port_scanner_tab() -> None:
         with col_opt1:
             concurrency = st.slider(
                 "Concurrencia simultánea (Manual)",
-                min_value=10,
-                max_value=1000,
-                value=150,
-                step=10,
+                min_value=10, max_value=1000, value=150, step=10,
             )
         with col_opt2:
             timeout = st.slider(
                 "Timeout por socket en segundos (Manual)",
-                min_value=0.5,
-                max_value=5.0,
-                value=1.5,
-                step=0.5,
+                min_value=0.5, max_value=5.0, value=1.5, step=0.5,
             )
 
         submitted = st.form_submit_button("Iniciar Auditoría de Puertos 🚀")
@@ -102,7 +94,7 @@ def render_port_scanner_tab() -> None:
             st.error(f"❌ Objetivo bloqueado por seguridad: {resolved_or_error}")
             return
 
-        # 🌐 Reconocimiento previo de DNS y metadatos de red antes del escaneo
+        # Reconocimiento previo de DNS
         with st.spinner("🌐 Resolviendo registros DNS y metadatos del objetivo..."):
             dns_info = {}
             try:
@@ -126,31 +118,29 @@ def render_port_scanner_tab() -> None:
             ports_list = list(range(1, 65536))
             effective_concurrency = max(concurrency, 500)
             effective_timeout = timeout
-            st.warning(
-                f"🚀 Full Scan activado: auditando los 65.535 puertos a velocidad máxima (concurrencia={effective_concurrency})."
-            )
+            st.warning(f"🚀 Full Scan activado: auditando los 65.535 puertos a velocidad máxima (concurrencia={effective_concurrency}).")
         elif "Modo Animal" in scan_profile:
             ports_list = list(range(1, 65536))
             effective_concurrency = min(concurrency, 15)
             effective_timeout = max(timeout, 3.0)
             st.warning(
                 f"🦁 Modo Animal activado: barrido completo de 65.535 puertos con concurrencia reducida ({effective_concurrency}) "
-                f"y timeout extendido ({effective_timeout}s) para evitar bloqueos. Este proceso demorará unos minutos."
+                f"y timeout extendido ({effective_timeout}s). Este proceso demorará unos minutos."
             )
         else:
             effective_concurrency = concurrency
             effective_timeout = timeout
             ports_list = parse_port_range(ports_input)
-            if not ports_list:
-                st.error("❌ El formato de puertos especificado es inválido.")
-                return
+
+        if not ports_list:
+            st.error("❌ El formato de puertos especificado es inválido.")
+            return
 
         total_ports = len(ports_list)
         st.info(f"Puertos totales configurados para auditar en `{resolved_or_error}`: **{total_ports}**")
 
         progress_bar = st.progress(0)
         status_text = st.empty()
-
         open_ports_data = []
         scanned_count = 0
 
@@ -164,21 +154,18 @@ def render_port_scanner_tab() -> None:
         def handle_open(result: BannerResult) -> None:
             _host, port, _is_open, banner, service, os_guess, vulns = result
             risk = (
-                "🔴 Alto"
-                if port in (21, 22, 23, 445, 3389)
-                else ("🟡 Medio" if port in (80, 443, 3000, 3306, 5432, 6379, 8080) else "🟢 Bajo")
+                "🔴 Alto" if port in (21, 22, 23, 445, 3389) else
+                ("🟡 Medio" if port in (80, 443, 3000, 3306, 5432, 6379, 8080) else "🟢 Bajo")
             )
-            open_ports_data.append(
-                {
-                    "Puerto": port,
-                    "Estado": "Abierto",
-                    "Servicio": service,
-                    "SO Estimado": os_guess,
-                    "Riesgo": risk,
-                    "Banner / Versión": banner or "Desconocido",
-                    "CVEs / Riesgos": vulns if isinstance(vulns, str) else ", ".join(vulns),
-                }
-            )
+            open_ports_data.append({
+                "Puerto": port,
+                "Estado": "Abierto",
+                "Servicio": service,
+                "SO Estimado": os_guess,
+                "Riesgo": risk,
+                "Banner / Versión": banner or "Desconocido",
+                "CVEs / Riesgos": vulns if isinstance(vulns, str) else ", ".join(vulns),
+            })
             update_progress()
 
         def handle_close(_result: PortResult) -> None:
@@ -192,7 +179,6 @@ def render_port_scanner_tab() -> None:
         )
 
         start_time = datetime.now()
-
         with st.spinner("🔍 Ejecutando escaneo asíncrono y banner grabbing..."):
             try:
                 new_loop = asyncio.new_event_loop()
@@ -248,15 +234,14 @@ def render_port_scanner_tab() -> None:
                 st.markdown("### 📋 Informe de Seguridad (Groq AI)")
                 st.markdown(ai_report_content)
 
-            # 📁 Módulo de Exportación Multiformato
+            # Módulo de Exportación Multiformato
             st.markdown("---")
             st.markdown("### 📥 Exportar Resultados de Auditoría")
-            
             export_format = st.selectbox(
-    "Selecciona el formato de exportación",
-    options=["CSV", "JSON", "Word (.docx)", "PDF", "HTML Interactivo (.html)"],
-    index=0
-)
+                "Selecciona el formato de exportación",
+                options=["CSV", "JSON", "Word (.docx)", "PDF", "HTML Interactivo (.html)"],
+                index=0
+            )
 
             if export_format == "CSV":
                 csv_data = df.to_csv(index=False).encode("utf-8")
@@ -266,6 +251,7 @@ def render_port_scanner_tab() -> None:
                     file_name=f"atomum_audit_{last_target}.csv",
                     mime="text/csv"
                 )
+
             elif export_format == "JSON":
                 json_data = json.dumps({
                     "target": last_target,
@@ -279,15 +265,14 @@ def render_port_scanner_tab() -> None:
                     file_name=f"atomum_audit_{last_target}.json",
                     mime="application/json"
                 )
+
             elif export_format == "Word (.docx)":
                 try:
                     from docx import Document
                     doc = Document()
-                    
                     doc.add_heading(f"Reporte de Auditoría ATOMUM: {last_target}", 0)
                     doc.add_paragraph(f"Fecha de ejecución: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                     doc.add_paragraph(f"Tiempo de escaneo: {elapsed:.2f} segundos")
-                    
                     doc.add_heading("Hallazgos de Puertos Abiertos", level=1)
                     for r in results:
                         clean_risk = r['Riesgo'].replace('🔴 ', '[ALTO] ').replace('🟡 ', '[MEDIO] ').replace('🟢 ', '[BAJO] ')
@@ -296,39 +281,34 @@ def render_port_scanner_tab() -> None:
                             f"SO: {r['SO Estimado']} | Riesgo: {clean_risk} | Versión: {r['Banner / Versión']}",
                             style='List Bullet'
                         )
-                    
                     if ai_report_content:
                         doc.add_heading("Informe Ejecutivo y Hardening (Groq AI)", level=1)
-                        
                         for line_text in ai_report_content.split("\n"):
-                            # Procesar filas de tabla Markdown (Sección 5) sin viñetas forzadas innecesarias
-                            if line_text.strip().startswith("|"):
-                                parts = [p.strip() for p in line_text.split("|") if p.strip()]
-                                if len(parts) >= 4 and "Prioridad" not in parts[0] and "---" not in parts[0]:
-                                    row_str = f"[{parts[0]}] {parts[1]} (Responsable: {parts[2]} | Plazo: {parts[3]})"
-                                    doc.add_paragraph(row_str, style='List Bullet')
-                                continue
-                            
-                            cleaned_text = re.sub(r'[*#_`]', '', line_text)
-                            cleaned_text = (
-                                cleaned_text.replace('→', '->')
-                                .replace('–', '-')
-                                .replace('—', '-')
-                                .replace('•', '-')
-                                .replace('≥', '>=')
-                                .replace('‑', '-')
-                            )
-                            
-                            if not cleaned_text.strip():
-                                continue
-                            
-                            if any(cleaned_text.strip().startswith(prefix) for prefix in ["1.", "2.", "3.", "4.", "5.", "Conclusión"]):
-                                doc.add_heading(cleaned_text.strip(), level=2)
-                            elif cleaned_text.strip().startswith("-") or cleaned_text.strip().startswith("•"):
-                                doc.add_paragraph(cleaned_text.strip().lstrip("- •"), style='List Bullet')
-                            else:
-                                doc.add_paragraph(cleaned_text.strip())
-                    
+                            for line_text in ai_report_content.split("\n"):
+                                if line_text.strip().startswith("|"):
+                                    parts = [p.strip() for p in line_text.split("|") if p.strip()]
+                                    if len(parts) >= 4 and "Prioridad" not in parts[0] and "---" not in parts[0]:
+                                        row_str = f"[{parts[0]}] {parts[1]} (Responsable: {parts[2]} | Plazo: {parts[3]})"
+                                        doc.add_paragraph(row_str, style='List Bullet')
+                                    continue
+                                cleaned_text = re.sub(r'[*#_`]', '', line_text)
+                                cleaned_text = (
+                                    cleaned_text.replace('→', '->')
+                                    .replace('–', '-')
+                                    .replace('—', '-')
+                                    .replace('•', '-')
+                                    .replace('≥', '>=')
+                                    .replace('‑', '-')
+                                )
+                                if not cleaned_text.strip():
+                                    continue
+                                if any(cleaned_text.strip().startswith(prefix) for prefix in ["1.", "2.", "3.", "4.", "5.", "Conclusión"]):
+                                    doc.add_heading(cleaned_text.strip(), level=2)
+                                elif cleaned_text.strip().startswith("-") or cleaned_text.strip().startswith("•"):
+                                    doc.add_paragraph(cleaned_text.strip().lstrip("- •"), style='List Bullet')
+                                else:
+                                    doc.add_paragraph(cleaned_text.strip())
+
                     bio = io.BytesIO()
                     doc.save(bio)
                     bio.seek(0)
@@ -340,20 +320,18 @@ def render_port_scanner_tab() -> None:
                     )
                 except ImportError:
                     st.warning("⚠️ La librería `python-docx` no está disponible en el entorno.")
+
             elif export_format == "PDF":
                 try:
                     from fpdf import FPDF
                     pdf = FPDF()
                     pdf.add_page()
-                    
                     pdf.set_margins(left=10, top=10, right=10)
-                    
                     pdf.set_font("Arial", "B", 16)
                     pdf.cell(190, 10, f"ATOMUM Security Audit: {last_target}", ln=True)
                     pdf.set_font("Arial", "", 10)
                     pdf.cell(190, 10, f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Elapsed: {elapsed:.2f}s", ln=True)
                     pdf.ln(5)
-                    
                     pdf.set_font("Arial", "B", 12)
                     pdf.cell(190, 10, "Open Ports & Findings:", ln=True)
                     pdf.set_font("Arial", "", 9)
@@ -362,13 +340,12 @@ def render_port_scanner_tab() -> None:
                         line = f"Port: {r['Puerto']} | Serv: {r['Servicio']} | OS: {r['SO Estimado']} | Risk: {clean_risk}"
                         safe_line = line.encode('latin-1', 'replace').decode('latin-1')
                         pdf.cell(190, 6, safe_line, ln=True)
-                    
+
                     if ai_report_content:
                         pdf.ln(5)
                         pdf.set_font("Arial", "B", 12)
                         pdf.cell(190, 10, "AI Security Recommendations:", ln=True)
                         pdf.set_font("Arial", "", 8)
-                        
                         for line_text in ai_report_content.split("\n"):
                             if line_text.strip().startswith("|"):
                                 parts = [p.strip() for p in line_text.split("|") if p.strip()]
@@ -376,7 +353,6 @@ def render_port_scanner_tab() -> None:
                                     line_text = f"• [{parts[0]}] {parts[1]} (Resp: {parts[2]} | Plazo: {parts[3]})"
                                 else:
                                     continue
-                            
                             cleaned_text = re.sub(r'[*#_`]', '', line_text)
                             cleaned_text = (
                                 cleaned_text.replace('→', '->')
@@ -387,24 +363,14 @@ def render_port_scanner_tab() -> None:
                                 .replace('‑', '-')
                             )
                             cleaned_text = cleaned_text.replace('\u202f', ' ').replace('\u00a0', ' ')
-                            
                             safe_text = cleaned_text.encode('latin-1', 'replace').decode('latin-1')
-                            
                             if not safe_text.strip():
                                 pdf.ln(3)
                                 continue
-                            
                             pdf.set_x(10)
-                            
-                            if len(safe_text.strip()) < 65 and not safe_text.strip().endswith('.'):
-                                pdf.set_font("Arial", "B", 9)
-                                pdf.multi_cell(190, 5, safe_text.strip(), new_x="LMARGIN", new_y="NEXT")
-                                pdf.set_font("Arial", "", 8)
-                            else:
-                                pdf.multi_cell(190, 5, safe_text.strip(), new_x="LMARGIN", new_y="NEXT")
-                            
-                    pdf_output = bytes(pdf.output())
+                            pdf.multi_cell(190, 5, safe_text.strip(), new_x="LMARGIN", new_y="NEXT")
 
+                    pdf_output = bytes(pdf.output())
                     st.download_button(
                         label="⬇️ Descargar Reporte en PDF",
                         data=pdf_output,
@@ -413,15 +379,14 @@ def render_port_scanner_tab() -> None:
                     )
                 except ImportError:
                     st.warning("⚠️ La librería `fpdf2` no está disponible en el entorno.")
-            elif export_format == "HTML Interactivo (.html)":
-            try:
-                # Calcular métricas KPI para el resumen superior
-                total_ports_count = len(results)
-                high_risks_count = sum(1 for r in results if "ALTO" in r['Riesgo'].upper() or "🔴" in r['Riesgo'])
-                med_low_count = total_ports_count - high_risks_count
 
-                # Estructura HTML corporativa avanzada con interactividad JS
-                html_content = f"""<!DOCTYPE html>
+            elif export_format == "HTML Interactivo (.html)":
+                try:
+                    total_ports_count = len(results)
+                    high_risks_count = sum(1 for r in results if "ALTO" in r['Riesgo'].upper() or "🔴" in r['Riesgo'])
+                    med_low_count = total_ports_count - high_risks_count
+
+                    html_content = f"""<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -547,7 +512,6 @@ def render_port_scanner_tab() -> None:
         .risk-high {{ background: rgba(248, 81, 73, 0.15); color: var(--risk-high); border: 1px solid var(--risk-high); }}
         .risk-med {{ background: rgba(210, 153, 34, 0.15); color: var(--risk-med); border: 1px solid var(--risk-med); }}
         .risk-low {{ background: rgba(63, 185, 80, 0.15); color: var(--risk-low); border: 1px solid var(--risk-low); }}
-        
         .ai-wrapper {{
             position: relative;
             margin-top: 15px;
@@ -646,12 +610,12 @@ def render_port_scanner_tab() -> None:
         <div id="portsSection" class="collapsible-content" style="max-height: 1000px;">
             <div class="port-grid" style="margin-top: 15px;">
 """
-                for r in results:
-                    risk_val = r['Riesgo']
-                    css_risk = "risk-high" if "ALTO" in risk_val.upper() or "🔴" in risk_val else ("risk-med" if "MEDIO" in risk_val.upper() or "🟡" in risk_val else "risk-low")
-                    clean_risk_text = risk_val.replace('🔴 ', '').replace('🟡 ', '').replace('🟢 ', '')
-                    
-                    html_content += f"""                <div class="port-card">
+                    for r in results:
+                        risk_val = r['Riesgo']
+                        css_risk = "risk-high" if "ALTO" in risk_val.upper() or "🔴" in risk_val else ("risk-med" if "MEDIO" in risk_val.upper() or "🟡" in risk_val else "risk-low")
+                        clean_risk_text = risk_val.replace('🔴 ', '').replace('🟡 ', '').replace('🟢 ', '')
+                        
+                        html_content += f"""                <div class="port-card">
                     <div>
                         <span class="port-badge">Puerto {r['Puerto']} ({r['Servicio']})</span><br>
                         <span style="font-size: 13px; color: var(--text-muted);">SO Estimado: {r['SO Estimado']} | Versión: {r['Banner / Versión']}</span>
@@ -661,11 +625,11 @@ def render_port_scanner_tab() -> None:
                     </div>
                 </div>\n"""
 
-                html_content += """            </div>
+                    html_content += """            </div>
         </div>\n"""
 
-                if ai_report_content:
-                    html_content += f"""        <h2 onclick="toggleSection('aiSection')" style="margin-top: 25px;">🤖 Informe Ejecutivo y Hardening (Groq AI) <span>▼</span></h2>
+                    if ai_report_content:
+                        html_content += f"""        <h2 onclick="toggleSection('aiSection')" style="margin-top: 25px;">🤖 Informe Ejecutivo y Hardening (Groq AI) <span>▼</span></h2>
         <div id="aiSection" class="collapsible-content" style="max-height: 2000px;">
             <div class="ai-wrapper">
                 <button id="copyBtn" class="copy-btn" onclick="copyAiReport()">📋 Copiar Informe</button>
@@ -673,20 +637,20 @@ def render_port_scanner_tab() -> None:
             </div>
         </div>\n"""
 
-                html_content += f"""        <footer>
+                    html_content += f"""        <footer>
             ATOMUM Modular Core v2.0 &bull; Motor Activo: Groq Cloud Engine &bull; Auditoría Autónoma de Seguridad
         </footer>
     </div>
 </body>
 </html>"""
 
-                st.download_button(
-                    label="⬇️ Descargar Reporte HTML Corporativo Avanzado (.html)",
-                    data=html_content.encode('utf-8'),
-                    file_name=f"atomum_audit_{last_target}.html",
-                    mime="text/html"
-                )
-            except Exception as e:
-                st.error(f"⚠️ Error generando el reporte HTML corporativo: {e}")
+                    st.download_button(
+                        label="⬇️ Descargar Reporte HTML Corporativo Avanzado (.html)",
+                        data=html_content.encode('utf-8'),
+                        file_name=f"atomum_audit_{last_target}.html",
+                        mime="text/html"
+                    )
+                except Exception as e:
+                    st.error(f"⚠️ Error generando el reporte HTML corporativo: {e}")
         else:
             st.info("🛡️ No se detectaron puertos abiertos en el rango seleccionado para este objetivo.")
