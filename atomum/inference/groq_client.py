@@ -1,8 +1,11 @@
 import os
 from typing import Any, Dict
+
 from groq import Groq
+
 from atomum.interfaces.inference import InferenceEngine
 from config.settings import settings
+
 
 class GroqInferenceClient(InferenceEngine):
     def __init__(self, api_key: str | None = None):
@@ -13,8 +16,7 @@ class GroqInferenceClient(InferenceEngine):
         self.client = Groq(api_key=self.api_key)
 
     async def run(self, model_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Ejecuta la inferencia contra el modelo de Groq utilizando los parámetros del payload.
+        """Ejecuta la inferencia contra el modelo de Groq utilizando los parámetros del payload.
         Fuerza la mitigación de modelos deprecados reemplazándolos por el activo en settings.
         """
         try:
@@ -24,29 +26,34 @@ class GroqInferenceClient(InferenceEngine):
                 model_id = active_model
 
             messages = payload.get("messages", [])
-            temperature = payload.get("temperature", 0.1)
-            max_tokens = payload.get("max_tokens", 16384)
+            temperature = float(payload.get("temperature", 0.1))
+            max_tokens = int(payload.get("max_tokens", 16384))
 
             # Llamada al SDK oficial de Groq con el modelo blindado
             chat_completion = self.client.chat.completions.create(
                 model=model_id,
                 messages=messages,
                 temperature=temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
             )
+
+            choice = chat_completion.choices[0] if chat_completion.choices else None
+            content = (choice.message.content or "") if choice and choice.message else ""
+            finish_reason = getattr(choice, "finish_reason", None)
+
+            usage_obj = getattr(chat_completion, "usage", None)
+            usage = {
+                "prompt_tokens": getattr(usage_obj, "prompt_tokens", None),
+                "completion_tokens": getattr(usage_obj, "completion_tokens", None),
+                "total_tokens": getattr(usage_obj, "total_tokens", None),
+            }
 
             return {
                 "status": "success",
                 "model": model_id,
-                "content": chat_completion.choices[0].message.content,
-                "usage": {
-                    "prompt_tokens": chat_completion.usage.prompt_tokens,
-                    "completion_tokens": chat_completion.usage.completion_tokens,
-                    "total_tokens": chat_completion.usage.total_tokens
-                }
+                "content": content,
+                "finish_reason": finish_reason,
+                "usage": usage,
             }
         except Exception as e:
-            return {
-                "status": "error",
-                "error_message": str(e)
-            }
+            return {"status": "error", "error_message": str(e)}
