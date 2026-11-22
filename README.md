@@ -66,7 +66,7 @@ Nota Operativa (TPM / Tier Gratuito): El módulo de auto-mejora se encuentra fun
 - [ ] Mapeo Topológico de Red (CIDR): Barrido de hosts activos en rangos completos de subred (ej. 192.168.1.0/24) y graficado de nodos vivos previo al escaneo de puertos.  
 
 ## 📂 Estructura del Proyecto
-
+```text
 ATOMUM/
 ├── atomum/            # Capa de inferencia desacoplada (GroqClient, InferenceService)
 ├── core/              # Motor principal, guardrails y cliente HTTP asíncrono
@@ -76,6 +76,7 @@ ATOMUM/
 ├── app.py             # Interfaz principal de control en Streamlit
 ├── runner.py          # Orquestador autónomo y flujo de PRs en GitHub
 └── cli.py             # Interfaz de ejecución por línea de comandos
+```
 
 ## 🚀 Despliegue y Configuración
 
