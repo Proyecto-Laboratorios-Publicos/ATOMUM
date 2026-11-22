@@ -3,9 +3,11 @@
 ATOMUM: Centro de Control Autónomo
 Panel principal unificado con Consola Cognitiva, Ciclo de Auto-Mejora y Escáner de Puertos TCP.
 """
+
 import asyncio
 import os
 import sys
+from typing import Any, Dict
 import streamlit as st
 
 # Asegurar rutas absolutas exactas para importar los módulos de Atomum
@@ -23,9 +25,43 @@ scanner_available = False
 render_port_scanner_tab = None
 try:
     from security.port_scanner.ui import render_port_scanner_tab
+
     scanner_available = True
 except Exception as e:
     scanner_available = False
+
+# Importación robusta del flujo protegido de PRs (Human-in-the-Loop + AST)
+pr_guard_ui_available = False
+render_protected_pr_section = None
+try:
+    from autonomous_loop.pr_ui_helper import render_protected_pr_section
+
+    pr_guard_ui_available = True
+except Exception:
+    pr_guard_ui_available = False
+
+
+class _DryRunPullRequestClient:
+    """Cliente local/simulado de respaldo cuando se prueba el flujo de aprobación sin publicar PR remoto."""
+
+    def create_pull_request(
+        self,
+        repo: str,
+        head_branch: str,
+        base_branch: str,
+        title: str,
+        body: str,
+    ) -> Dict[str, Any]:
+        return {
+            "number": 999,
+            "repo": repo,
+            "head_branch": head_branch,
+            "base_branch": base_branch,
+            "title": title,
+            "body": body,
+            "mode": "dry_run_approved",
+        }
+
 
 # -----------------------------------------------------------------
 # Estilos CSS - Cyberpunk Minimalista
@@ -77,8 +113,10 @@ pre {
 }
 """
 
+
 def inject_css(css: str) -> None:
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+
 
 def run_async(coro):
     """Ejecuta corrutinas del núcleo modular dentro de Streamlit de forma segura."""
@@ -86,7 +124,7 @@ def run_async(coro):
         loop = asyncio.get_event_loop()
     except RuntimeError:
         loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+    asyncio.set_event_loop(loop)
     if loop.is_running():
         new_loop = asyncio.new_event_loop()
         try:
@@ -94,6 +132,7 @@ def run_async(coro):
         finally:
             new_loop.close()
     return loop.run_until_complete(coro)
+
 
 def sync_runtime_secrets() -> None:
     """Sincroniza secretos de Streamlit Cloud hacia variables de entorno del proceso."""
@@ -107,6 +146,7 @@ def sync_runtime_secrets() -> None:
         if val:
             os.environ[secret_key] = val
 
+
 # Configuración de la página con layout amplio
 st.set_page_config(
     page_title="ATOMUM - Centro de Control Autónomo",
@@ -114,9 +154,9 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
-
 inject_css(CYBERPUNK_CSS)
 sync_runtime_secrets()
+
 
 # Inicializar componentes modulares en caché de sesión
 @st.cache_resource
@@ -133,7 +173,9 @@ def load_atomum_modular_core():
     auto_runner = AutonomousRunner()
     return inference_engine, context_svc, planner, auto_runner, mode
 
+
 inference, context_store, planner, auto_runner, active_mode = load_atomum_modular_core()
+
 
 async def execute_modular_pipeline(instruction: str) -> str:
     await context_store.set("last_instruction", {"prompt": instruction})
@@ -143,7 +185,10 @@ async def execute_modular_pipeline(instruction: str) -> str:
         model_id=model_id,
         payload={
             "messages": [
-                {"role": "system", "content": "Eres ATOMUM, un sistema autónomo técnico de alta precisión."},
+                {
+                    "role": "system",
+                    "content": "Eres ATOMUM, un sistema autónomo técnico de alta precisión.",
+                },
                 {"role": "user", "content": instruction},
             ],
             "plan": plan,
@@ -151,31 +196,32 @@ async def execute_modular_pipeline(instruction: str) -> str:
     )
     if result.get("status") == "error":
         return f"⚠️ Error del motor: {result.get('error_message')}"
-    
     output = (
-        result.get("output") or 
-        result.get("response") or 
-        result.get("text") or 
-        result.get("content") or 
-        str(result)
+        result.get("output")
+        or result.get("response")
+        or result.get("text")
+        or result.get("content")
+        or str(result)
     )
     await context_store.set("last_output", {"response": output})
     return output
 
+
 # Encabezado principal
-st.markdown("""
-<div class="card">
-    <h1 style="color:var(--accent);margin-top:0;">🤖 ATOMUM: Centro de Control Autónomo</h1>
-    <p>Panel de operaciones en tiempo real. Envía directivas técnicas, gestiona el ciclo de auto-mejora o audita redes con el escáner asíncrono.</p>
-</div>
-""", unsafe_allow_html=True)
+st.markdown(
+    """
+    <div class="card">
+        <h1 style="color:var(--accent);margin-top:0;">🤖 ATOMUM: Centro de Control Autónomo</h1>
+        <p>Panel de operaciones en tiempo real. Envía directivas técnicas, gestiona el ciclo de auto-mejora o audita redes con el escáner asíncrono.</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 # Pestañas principales de navegación unificadas
-tab_ops, tab_self_improve, tab_scanner = st.tabs([
-    "⚡ Consola Cognitiva", 
-    "🧬 Auto-Mejora & GitHub PRs", 
-    "🛡️ Escáner de Puertos TCP"
-])
+tab_ops, tab_self_improve, tab_scanner = st.tabs(
+    ["⚡ Consola Cognitiva", "🧬 Auto-Mejora & GitHub PRs", "🛡️ Escáner de Puertos TCP"]
+)
 
 # -----------------------------------------------------------------
 # PESTAÑA 1: Consola Cognitiva en Tiempo Real
@@ -198,11 +244,14 @@ with tab_ops:
                 st.error(f"Error en el núcleo modular: {exc}")
 
     if "last_response" in st.session_state:
-        st.markdown("""
-        <div class="card">
-            <h3 style="color:var(--accent);">🧠 Respuesta del Núcleo Cognitivo</h3>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div class="card">
+                <h3 style="color:var(--accent);">🧠 Respuesta del Núcleo Cognitivo</h3>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         st.markdown(st.session_state["last_response"])
 
 # -----------------------------------------------------------------
@@ -210,13 +259,16 @@ with tab_ops:
 # -----------------------------------------------------------------
 with tab_self_improve:
     gh_configured = bool(os.getenv("GITHUB_TOKEN", ""))
-    st.markdown(f"""
-    <div class="card">
-        <h3 style="color:var(--accent);margin-top:0;">🧬 Ciclo Autónomo de Propuestas de Código</h3>
-        <p>ATOMUM analiza un módulo del repositorio, valida sintaxis AST, ejecuta <code>pytest tests/unit</code> y abre un Pull Request en rama aislada.</p>
-        <p>Estado <code>GITHUB_TOKEN</code>: <strong>{"🟢 Configurado" if gh_configured else "🟡 No detectado (solo validación local disponible)"}</strong></p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="card">
+            <h3 style="color:var(--accent);margin-top:0;">🧬 Ciclo Autónomo de Propuestas de Código</h3>
+            <p>ATOMUM analiza un módulo del repositorio, valida sintaxis AST, ejecuta <code>pytest tests/unit</code> y abre un Pull Request en rama aislada.</p>
+            <p>Estado <code>GITHUB_TOKEN</code>: <strong>{"🟢 Configurado" if gh_configured else "🟡 No detectado (solo validación local disponible)"}</strong></p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     candidate_files = [
         "skills/data_tools.py",
@@ -267,7 +319,15 @@ with tab_self_improve:
             st.info("✅ Parche validado con AST y Pytest en entorno local (PR omitido por configuración).")
         elif status in ("reverted", "blocked", "error"):
             st.warning(f"⚠️ Ciclo detenido ({status}): {res.get('message')}")
-            st.json(res)
+        st.json(res)
+
+    st.markdown("---")
+    if pr_guard_ui_available and render_protected_pr_section is not None:
+        render_protected_pr_section(pr_client=_DryRunPullRequestClient())
+    else:
+        st.info(
+            "💡 Subí `autonomous_loop/pr_guard.py` y `autonomous_loop/pr_ui_helper.py` para activar el control visual de aprobación humana (HITL) sobre PRs."
+        )
 
 # -----------------------------------------------------------------
 # PESTAÑA 3: Escáner de Puertos TCP (Security Suite)
@@ -277,7 +337,9 @@ with tab_scanner:
         render_port_scanner_tab()
     else:
         st.error("❌ El módulo visual del escáner de puertos no pudo inicializarse.")
-        st.info("💡 Consejo: Asegurate de que los archivos `utils.py`, `core.py` y `ui.py` estén subidos dentro de la carpeta `security/port_scanner/` en GitHub.")
+        st.info(
+            "💡 Consejo: Asegurate de que los archivos `utils.py`, `core.py` y `ui.py` estén subidos dentro de la carpeta `security/port_scanner/` en GitHub."
+        )
 
 st.markdown("---")
 st.markdown(f"🧬 *ATOMUM Modular Core v2.0 | Motor Activo: {active_mode}*")
