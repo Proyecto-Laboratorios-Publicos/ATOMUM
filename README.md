@@ -57,39 +57,39 @@ Pydantic (Validación de esquemas y tipos de datos)
 
 ## 🗺️ Roadmap & Próximas Actualizaciones
 
-[ ] Correlación Offline de CVEs (cpe_database.json): Mapeo local ultraligero entre banners de servicio y vulnerabilidades/CVSS sin requerir bases de datos pesadas.
+- [ ] Correlación Offline de CVEs (cpe_database.json): Mapeo local ultraligero entre banners de servicio y vulnerabilidades/CVSS sin requerir bases de datos pesadas.
 
-[ ] Escaneo de Aplicaciones Web (DAST): Fuzzing asíncrono de directorios, detección de tecnologías web y auditoría de cabeceras HTTP/HTTPS (HSTS, CSP, X-Frame-Options).
+- [ ] Escaneo de Aplicaciones Web (DAST): Fuzzing asíncrono de directorios, detección de tecnologías web y auditoría de cabeceras HTTP/HTTPS (HSTS, CSP, X-Frame-Options).
 
-[ ] Mapeo Topológico de Red (CIDR): Barrido de hosts activos en rangos completos de subred (ej. 192.168.1.0/24) y graficado de nodos vivos previo al escaneo de puertos.  
+- [ ] Mapeo Topológico de Red (CIDR): Barrido de hosts activos en rangos completos de subred (ej. 192.168.1.0/24) y graficado de nodos vivos previo al escaneo de puertos.  
 
 ## 🚀 Despliegue y Configuración
 
-1. **Clonar el repositorio:**
+**1. Clonar el repositorio:**
    ```bash
    git clone https://github.com/Proyecto-Laboratorios-Publicos/ATOMUM.git
    cd ATOMUM
    ```
 
-2. Instalar dependencias:
+**2. Instalar dependencias:**
 
    ```bash
    pip install -r requirements.txt
    ```
 
-3. Configurar variables de entorno (o secrets en Streamlit):
+**3. Configurar variables de entorno (o secrets en Streamlit):**
    ```env
    GROQ_API_KEY=tu_clave_de_api_aqui
    ATOMUM_LLM_MODEL=openai/gpt-oss-120b
    ```
-4. Ejecutar la interfaz de control:
+**4. Ejecutar la interfaz de control:**
    ```bash
    streamlit run app.py
    ```
 
 ## 🛡️ Principios Operativos 
 
-Seguridad Primero: Ninguna directiva bypasses los guardarraíses constitucionales. 
+Seguridad Primero: Ninguna directiva evade los guardarraíses constitucionales. 
 
 Resiliencia: Reintentos automáticos y manejo elegante de excepciones de red para evitar interrupciones en el bucle principal.   
 
