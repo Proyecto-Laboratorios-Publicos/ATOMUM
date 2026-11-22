@@ -108,3 +108,6 @@ Seguridad Primero: Ninguna directiva evade los guardarraíses constitucionales.
 
 Resiliencia: Reintentos automáticos y manejo elegante de excepciones de red para evitar interrupciones en el bucle principal.   
 
+---
+
+**Versión actual:** `ATOMUM v2.0` · **Estado:** Producción / Auditoría Activa · **Licencia:** MIT
