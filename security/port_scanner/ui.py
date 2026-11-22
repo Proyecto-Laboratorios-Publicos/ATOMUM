@@ -63,6 +63,23 @@ def _classify_risk(port: int, vulns_text: str) -> str:
     return "🟢 Bajo"
 
 
+def _clean_risk_label(risk_value: str) -> str:
+    """Normaliza la etiqueta de riesgo eliminando emojis decorativos."""
+    return (
+        str(risk_value)
+        .replace("🔴 ", "")
+        .replace("🟡 ", "")
+        .replace("🟢 ", "")
+        .strip()
+    )
+
+
+def _safe_filename_part(value: str) -> str:
+    """Genera un segmento seguro para nombres de archivos descargables."""
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", (value or "target").strip())
+    return cleaned.strip("._") or "target"
+
+
 def _normalize_report_line(line_text: str) -> str:
     """Limpia marcas básicas de Markdown y caracteres especiales para exportaciones."""
     cleaned = re.sub(r"[*#_`]", "", line_text)
@@ -90,15 +107,10 @@ def _build_docx_bytes(target: str, elapsed: float, results: List[Dict[str, Any]]
 
     doc.add_heading("Hallazgos de Puertos Abiertos", level=1)
     for r in results:
-        clean_risk = (
-            str(r["Riesgo"])
-            .replace("🔴 ", "[ALTO] ")
-            .replace("🟡 ", "[MEDIO] ")
-            .replace("🟢 ", "[BAJO] ")
-        )
+        clean_risk = _clean_risk_label(str(r["Riesgo"])).upper()
         doc.add_paragraph(
             f"Puerto: {r['Puerto']} | Estado: {r['Estado']} | Servicio: {r['Servicio']} | "
-            f"SO: {r['SO Estimado']} | Riesgo: {clean_risk} | Versión: {r['Banner / Versión']} | "
+            f"SO: {r['SO Estimado']} | Riesgo: [{clean_risk}] | Versión: {r['Banner / Versión']} | "
             f"Riesgos/CVEs: {r['CVEs / Riesgos']}",
             style="List Bullet",
         )
@@ -157,13 +169,8 @@ def _build_pdf_bytes(target: str, elapsed: float, results: List[Dict[str, Any]],
     pdf.cell(190, 10, "Open Ports & Findings:", ln=True)
     pdf.set_font("Arial", "", 9)
     for r in results:
-        clean_risk = (
-            str(r["Riesgo"])
-            .replace("🔴 ", "[ALTO] ")
-            .replace("🟡 ", "[MEDIO] ")
-            .replace("🟢 ", "[BAJO] ")
-        )
-        line = f"Port: {r['Puerto']} | Serv: {r['Servicio']} | OS: {r['SO Estimado']} | Risk: {clean_risk}"
+        clean_risk = _clean_risk_label(str(r["Riesgo"])).upper()
+        line = f"Port: {r['Puerto']} | Serv: {r['Servicio']} | OS: {r['SO Estimado']} | Risk: [{clean_risk}]"
         safe_line = line.encode("latin-1", "replace").decode("latin-1")
         pdf.cell(190, 6, safe_line, ln=True)
 
@@ -196,7 +203,7 @@ def _build_pdf_bytes(target: str, elapsed: float, results: List[Dict[str, Any]],
 def _build_html_report(target: str, elapsed: float, results: List[Dict[str, Any]], ai_report: str) -> str:
     total_ports_count = len(results)
     high_risks_count = sum(
-        1 for r in results if "ALTO" in str(r["Riesgo"]).upper() or "🔴" in str(r["Riesgo"])
+        1 for r in results if "ALTO" in _clean_risk_label(str(r["Riesgo"])).upper()
     )
     med_low_count = total_ports_count - high_risks_count
 
@@ -205,18 +212,16 @@ def _build_html_report(target: str, elapsed: float, results: List[Dict[str, Any]
 
     port_cards_html = ""
     for r in results:
-        risk_val = str(r["Riesgo"])
-        if "ALTO" in risk_val.upper() or "🔴" in risk_val:
+        clean_risk_raw = _clean_risk_label(str(r["Riesgo"]))
+        risk_upper = clean_risk_raw.upper()
+        if "ALTO" in risk_upper:
             css_risk = "risk-high"
-        elif "MEDIO" in risk_val.upper() or "🟡" in risk_val:
+        elif "MEDIO" in risk_upper:
             css_risk = "risk-med"
         else:
             css_risk = "risk-low"
 
-        clean_risk_text = html.escape(
-            risk_val.replace("🔴 ", "").replace("🟡 ", "").replace("🟢 ", ""),
-            quote=True,
-        )
+        clean_risk_text = html.escape(clean_risk_raw, quote=True)
         safe_port = html.escape(str(r["Puerto"]), quote=True)
         safe_service = html.escape(str(r["Servicio"]), quote=True)
         safe_os = html.escape(str(r["SO Estimado"]), quote=True)
@@ -225,7 +230,7 @@ def _build_html_report(target: str, elapsed: float, results: List[Dict[str, Any]
 
         port_cards_html += (
             f'<div class="port-card">'
-            f'<div>'
+            f"<div>"
             f'<span class="port-badge">Puerto {safe_port} ({safe_service})</span><br>'
             f'<span style="font-size: 13px; color: var(--text-muted);">'
             f"SO Estimado: {safe_os} | Versión: {safe_banner}"
@@ -630,6 +635,7 @@ def render_port_scanner_tab() -> None:
         results: List[Dict[str, Any]] = st.session_state["scanner_last_results"]
         last_target: str = st.session_state.get("scanner_last_target", "")
         elapsed: float = st.session_state.get("scanner_last_elapsed", 0.0)
+        safe_target_file = _safe_filename_part(last_target)
 
         st.success(f"✅ Auditoría sobre `{last_target}` completada en {elapsed:.2f} segundos.")
 
@@ -675,7 +681,7 @@ def render_port_scanner_tab() -> None:
                 st.download_button(
                     label="⬇️ Descargar Reporte en CSV",
                     data=csv_data,
-                    file_name=f"atomum_audit_{last_target}.csv",
+                    file_name=f"atomum_audit_{safe_target_file}.csv",
                     mime="text/csv",
                 )
             elif export_format == "JSON":
@@ -692,7 +698,7 @@ def render_port_scanner_tab() -> None:
                 st.download_button(
                     label="⬇️ Descargar Reporte en JSON",
                     data=json_data,
-                    file_name=f"atomum_audit_{last_target}.json",
+                    file_name=f"atomum_audit_{safe_target_file}.json",
                     mime="application/json",
                 )
             elif export_format == "Word (.docx)":
@@ -701,7 +707,7 @@ def render_port_scanner_tab() -> None:
                     st.download_button(
                         label="⬇️ Descargar Reporte en Word (.docx)",
                         data=docx_bytes,
-                        file_name=f"atomum_audit_{last_target}.docx",
+                        file_name=f"atomum_audit_{safe_target_file}.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     )
                 except ImportError:
@@ -712,7 +718,7 @@ def render_port_scanner_tab() -> None:
                     st.download_button(
                         label="⬇️ Descargar Reporte en PDF",
                         data=pdf_bytes,
-                        file_name=f"atomum_audit_{last_target}.pdf",
+                        file_name=f"atomum_audit_{safe_target_file}.pdf",
                         mime="application/pdf",
                     )
                 except ImportError:
@@ -723,7 +729,7 @@ def render_port_scanner_tab() -> None:
                     st.download_button(
                         label="⬇️ Descargar Reporte HTML Corporativo Avanzado (.html)",
                         data=html_content.encode("utf-8"),
-                        file_name=f"atomum_audit_{last_target}.html",
+                        file_name=f"atomum_audit_{safe_target_file}.html",
                         mime="text/html",
                     )
                 except Exception as e:
