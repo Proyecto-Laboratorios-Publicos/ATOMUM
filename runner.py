@@ -93,17 +93,109 @@ class AutonomousRunner:
         }
 
     @staticmethod
-    def _validate_candidate_code(code: str) -> tuple[bool, Optional[str]]:
+    def _clean_code_block(raw_code: str) -> str:
+        code = raw_code.strip()
+        if code.startswith("```"):
+            lines = code.splitlines()
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            code = "\n".join(lines).strip()
+        return code + "\n" if code else ""
+
+    @classmethod
+    def _try_repair_unterminated_tail(cls, code: str) -> Optional[str]:
+        """Intenta cerrar un f-string o string simple truncado al final del bloque."""
+        lines = code.splitlines()
+        if not lines:
+            return None
+        last = lines[-1]
+        for quote in ('"""', "'''", '"', "'"):
+            if last.count(quote) % 2 == 1:
+                lines[-1] = last + quote
+                candidate = "\n".join(lines) + "\n"
+                try:
+                    ast.parse(candidate)
+                    return candidate
+                except SyntaxError:
+                    continue
+        return None
+
+    @classmethod
+    def _merge_or_validate_code(cls, original_code: str, candidate_code: str) -> str:
+        """Si candidate_code define una sola función/clase presente en original_code, la reemplaza."""
+        try:
+            tree = ast.parse(candidate_code)
+        except SyntaxError:
+            return candidate_code
+
+        if len(tree.body) == 1 and isinstance(
+            tree.body[0], (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ):
+            target_name = tree.body[0].name
+            orig_lines = original_code.splitlines()
+            cand_lines = candidate_code.splitlines()
+            pattern = re.compile(
+                rf"^(\s*)(?:async\s+def|def|class)\s+{re.escape(target_name)}\b"
+            )
+            start_idx = None
+            base_indent = ""
+            for idx, line in enumerate(orig_lines):
+                m = pattern.match(line)
+                if m:
+                    start_idx = idx
+                    base_indent = m.group(1)
+                    break
+
+            if start_idx is not None:
+                end_idx = len(orig_lines)
+                for idx in range(start_idx + 1, len(orig_lines)):
+                    stripped = orig_lines[idx].strip()
+                    if not stripped:
+                        continue
+                    curr_indent = len(orig_lines[idx]) - len(orig_lines[idx].lstrip(" "))
+                    if curr_indent <= len(base_indent) and not stripped.startswith(
+                        ("@", "#", ")", "]", "}")
+                    ):
+                        end_idx = idx
+                        break
+
+                rebuilt = orig_lines[:start_idx] + cand_lines + orig_lines[end_idx:]
+                merged = "\n".join(rebuilt).strip() + "\n"
+                try:
+                    ast.parse(merged)
+                    return merged
+                except SyntaxError:
+                    pass
+
+        return candidate_code
+
+    @classmethod
+    def _validate_candidate_code(cls, code: str) -> tuple[bool, Optional[str], str]:
+        normalized = cls._clean_code_block(code)
+        if not normalized:
+            return False, "Código candidato vacío.", normalized
+
         if validate_user_code is not None:
             try:
-                validate_user_code(code)
+                validate_user_code(normalized)
             except Exception as exc:
-                return False, f"Guardrail/AST rechazó el código: {exc}"
+                return False, f"Guardrail/AST rechazó el código: {exc}", normalized
+
         try:
-            ast.parse(code)
-            return True, None
+            ast.parse(normalized)
+            return True, None, normalized
         except SyntaxError as syn_err:
-            return False, f"Validación AST fallida: {syn_err}"
+            repaired = cls._try_repair_unterminated_tail(normalized)
+            if repaired:
+                if validate_user_code is not None:
+                    try:
+                        validate_user_code(repaired)
+                    except Exception as exc:
+                        return False, f"Guardrail rechazó el código reparado: {exc}", repaired
+                return True, None, repaired
+            return False, f"Validación AST fallida: {syn_err}", normalized
 
     @staticmethod
     def _pytest_failed(test_output: str) -> bool:
@@ -132,9 +224,9 @@ class AutonomousRunner:
             "TITLE: <título corto>\n"
             "SUMMARY: <resumen técnico en una línea>\n"
             "```python\n"
-            "<código Python completo y sintácticamente válido>\n"
+            "<código Python completo o función/clase puntual válida>\n"
             "```\n"
-            "Mantén 100% de retrocompatibilidad y asegúrate de cerrar todas las estructuras y bloques."
+            "Mantén 100% de retrocompatibilidad y asegúrate de cerrar todas las estructuras, strings y bloques."
         )
         compact_tasks = json.dumps(tasks_data, ensure_ascii=False)[:800]
         user_prompt = (
@@ -181,7 +273,8 @@ class AutonomousRunner:
                 "raw_content": raw_content,
             }
 
-        valid, validation_err = self._validate_candidate_code(proposal["updated_code"])
+        merged_code = self._merge_or_validate_code(original_code, proposal["updated_code"])
+        valid, validation_err, final_code = self._validate_candidate_code(merged_code)
         if not valid:
             return {
                 "ok": False,
@@ -189,6 +282,7 @@ class AutonomousRunner:
                 "raw_content": raw_content,
             }
 
+        proposal["updated_code"] = final_code
         return {"ok": True, "proposal": proposal, "raw_content": raw_content}
 
     def _authorize_pr_creation(self, target_file: str) -> tuple[bool, str]:
