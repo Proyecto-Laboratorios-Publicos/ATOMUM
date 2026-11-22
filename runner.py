@@ -106,10 +106,11 @@ class AutonomousRunner:
 
     @classmethod
     def _try_repair_unterminated_tail(cls, code: str) -> Optional[str]:
-        """Intenta cerrar un f-string o string simple truncado al final del bloque."""
+        """Intenta cerrar strings, f-strings o delimitadores ({, [, () truncados al final."""
         lines = code.splitlines()
         if not lines:
             return None
+
         last = lines[-1]
         for quote in ('"""', "'''", '"', "'"):
             if last.count(quote) % 2 == 1:
@@ -119,7 +120,39 @@ class AutonomousRunner:
                     ast.parse(candidate)
                     return candidate
                 except SyntaxError:
-                    continue
+                    lines[-1] = last
+
+        base = "\n".join(lines)
+        closers = {"{": "}", "[": "]", "(": ")"}
+        stack: list[str] = []
+        in_str: Optional[str] = None
+        escaped = False
+
+        for ch in base:
+            if escaped:
+                escaped = False
+                continue
+            if ch == "\\":
+                escaped = True
+                continue
+            if in_str:
+                if ch == in_str:
+                    in_str = None
+                continue
+            if ch in ('"', "'"):
+                in_str = ch
+            elif ch in closers:
+                stack.append(closers[ch])
+            elif ch in closers.values() and stack and stack[-1] == ch:
+                stack.pop()
+
+        if stack:
+            repaired = base + "".join(reversed(stack)) + "\n"
+            try:
+                ast.parse(repaired)
+                return repaired
+            except SyntaxError:
+                return None
         return None
 
     @classmethod
