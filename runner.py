@@ -58,7 +58,6 @@ class AutonomousRunner:
         else:
             self.inference = InferenceService(client=StubInferenceClient())
 
-        # Blindaje preventivo: Forzar modelo moderno
         raw_model = os.getenv("ATOMUM_LLM_MODEL", "openai/gpt-oss-120b")
         if "llama3-70b-8192" in raw_model:
             logger.warning(
@@ -106,7 +105,6 @@ class AutonomousRunner:
 
     @classmethod
     def _close_dangling_blocks(cls, code: str) -> Optional[str]:
-        """Intenta cerrar un bloque try/except o estructuras abiertas al final del código."""
         lines = code.splitlines()
         if not lines:
             return None
@@ -115,7 +113,8 @@ class AutonomousRunner:
             stripped = lines[idx].strip()
             if not stripped or stripped.startswith("#"):
                 continue
-            indent = re.match(r"^(\s*)", lines[idx]).group(1)
+            match = re.match(r"^(\s*)", lines[idx])
+            indent = match.group(1) if match else ""
             if stripped.startswith("try:") and not any(
                 lines[j].lstrip().startswith(("except", "finally"))
                 for j in range(idx + 1, len(lines))
@@ -136,7 +135,6 @@ class AutonomousRunner:
 
     @classmethod
     def _try_repair_unterminated_tail(cls, code: str) -> Optional[str]:
-        """Intenta cerrar strings, f-strings, delimitadores o bloques try truncados."""
         lines = code.splitlines()
         if not lines:
             return None
@@ -188,7 +186,6 @@ class AutonomousRunner:
 
     @classmethod
     def _merge_or_validate_code(cls, original_code: str, candidate_code: str) -> str:
-        """Si candidate_code define una sola función/clase presente en original_code, la reemplaza."""
         try:
             tree = ast.parse(candidate_code)
         except SyntaxError:
@@ -407,7 +404,6 @@ class AutonomousRunner:
 
         tasks_data = self.files.read_json_file("tasks.json") or {}
 
-        # Primer intento + 1 reintento acotado si falla parseo o validación AST
         attempt = await self._request_code_proposal(
             target_file=target_file,
             goal=goal,
