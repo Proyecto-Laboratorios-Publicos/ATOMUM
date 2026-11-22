@@ -5,12 +5,15 @@ Resumen Ejecutivo con IA (Groq) y Exportación Multiformato (CSV, JSON, Word, PD
 """
 
 import asyncio
-import os
-import socket
-import json
+import html
 import io
+import json
+import os
 import re
+import socket
 from datetime import datetime
+from typing import Any, Dict, List
+
 import pandas as pd
 import streamlit as st
 
@@ -20,6 +23,7 @@ from security.port_scanner.utils import parse_port_range, validate_target
 try:
     from core.groq_client import call_groq_api
 except ImportError:
+
     def call_groq_api(prompt: str) -> str:
         api_key = os.getenv("GROQ_API_KEY", "")
         if not api_key:
@@ -27,8 +31,12 @@ except ImportError:
         try:
             from groq import Groq
             from config.settings import settings
+
             client = Groq(api_key=api_key)
-            target_model = os.getenv("ATOMUM_LLM_MODEL", getattr(settings, "MODEL_NAME", "llama3-70b-8192"))
+            target_model = os.getenv(
+                "ATOMUM_LLM_MODEL",
+                getattr(settings, "MODEL_NAME", "llama3-70b-8192"),
+            )
             resp = client.chat.completions.create(
                 model=target_model,
                 messages=[{"role": "user", "content": prompt}],
@@ -37,6 +45,419 @@ except ImportError:
             return resp.choices[0].message.content or "Sin respuesta del modelo."
         except Exception as exc:
             return f"⚠️ Error al consultar Groq API: {exc}"
+
+
+HIGH_RISK_PORTS = {21, 22, 23, 445, 1433, 3389, 6379, 27017}
+MEDIUM_RISK_PORTS = {80, 443, 3000, 3306, 5432, 8000, 8080, 8443}
+
+
+def _classify_risk(port: int, vulns_text: str) -> str:
+    """Clasifica el riesgo combinando exposición por puerto y señales de vulnerabilidad."""
+    vulns_upper = vulns_text.upper()
+    if port in HIGH_RISK_PORTS or any(
+        token in vulns_upper for token in ("CRÍTICO", "BACKDOOR", "SIN CIFRADO", "CVE-2011-")
+    ):
+        return "🔴 Alto"
+    if port in MEDIUM_RISK_PORTS or "CVE-" in vulns_upper or "VERIFICAR" in vulns_upper:
+        return "🟡 Medio"
+    return "🟢 Bajo"
+
+
+def _normalize_report_line(line_text: str) -> str:
+    """Limpia marcas básicas de Markdown y caracteres especiales para exportaciones."""
+    cleaned = re.sub(r"[*#_`]", "", line_text)
+    replacements = {
+        "→": "->",
+        "–": "-",
+        "—": "-",
+        "•": "-",
+        "≥": ">=",
+        "\u202f": " ",
+        "\u00a0": " ",
+    }
+    for old, new in replacements.items():
+        cleaned = cleaned.replace(old, new)
+    return cleaned.strip()
+
+
+def _build_docx_bytes(target: str, elapsed: float, results: List[Dict[str, Any]], ai_report: str) -> bytes:
+    from docx import Document
+
+    doc = Document()
+    doc.add_heading(f"Reporte de Auditoría ATOMUM: {target}", 0)
+    doc.add_paragraph(f"Fecha de ejecución: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    doc.add_paragraph(f"Tiempo de escaneo: {elapsed:.2f} segundos")
+
+    doc.add_heading("Hallazgos de Puertos Abiertos", level=1)
+    for r in results:
+        clean_risk = (
+            str(r["Riesgo"])
+            .replace("🔴 ", "[ALTO] ")
+            .replace("🟡 ", "[MEDIO] ")
+            .replace("🟢 ", "[BAJO] ")
+        )
+        doc.add_paragraph(
+            f"Puerto: {r['Puerto']} | Estado: {r['Estado']} | Servicio: {r['Servicio']} | "
+            f"SO: {r['SO Estimado']} | Riesgo: {clean_risk} | Versión: {r['Banner / Versión']} | "
+            f"Riesgos/CVEs: {r['CVEs / Riesgos']}",
+            style="List Bullet",
+        )
+
+    if ai_report:
+        doc.add_heading("Informe Ejecutivo y Hardening (Groq AI)", level=1)
+        for line_text in ai_report.split("\n"):
+            stripped = line_text.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("|"):
+                parts = [p.strip() for p in stripped.split("|") if p.strip()]
+                if len(parts) >= 4 and "Prioridad" not in parts[0] and "---" not in parts[0]:
+                    row_str = f"[{parts[0]}] {parts[1]} (Responsable: {parts[2]} | Plazo: {parts[3]})"
+                    doc.add_paragraph(row_str, style="List Bullet")
+                continue
+
+            cleaned_text = _normalize_report_line(stripped)
+            if not cleaned_text:
+                continue
+            if any(
+                cleaned_text.startswith(prefix)
+                for prefix in ("1.", "2.", "3.", "4.", "5.", "Conclusión")
+            ):
+                doc.add_heading(cleaned_text, level=2)
+            elif cleaned_text.startswith(("-", "•")):
+                doc.add_paragraph(cleaned_text.lstrip("- •"), style="List Bullet")
+            else:
+                doc.add_paragraph(cleaned_text)
+
+    bio = io.BytesIO()
+    doc.save(bio)
+    bio.seek(0)
+    return bio.getvalue()
+
+
+def _build_pdf_bytes(target: str, elapsed: float, results: List[Dict[str, Any]], ai_report: str) -> bytes:
+    from fpdf import FPDF
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_margins(left=10, top=10, right=10)
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(190, 10, f"ATOMUM Security Audit: {target}".encode("latin-1", "replace").decode("latin-1"), ln=True)
+
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(
+        190,
+        10,
+        f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Elapsed: {elapsed:.2f}s",
+        ln=True,
+    )
+    pdf.ln(5)
+
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(190, 10, "Open Ports & Findings:", ln=True)
+    pdf.set_font("Arial", "", 9)
+    for r in results:
+        clean_risk = (
+            str(r["Riesgo"])
+            .replace("🔴 ", "[ALTO] ")
+            .replace("🟡 ", "[MEDIO] ")
+            .replace("🟢 ", "[BAJO] ")
+        )
+        line = f"Port: {r['Puerto']} | Serv: {r['Servicio']} | OS: {r['SO Estimado']} | Risk: {clean_risk}"
+        safe_line = line.encode("latin-1", "replace").decode("latin-1")
+        pdf.cell(190, 6, safe_line, ln=True)
+
+    if ai_report:
+        pdf.ln(5)
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(190, 10, "AI Security Recommendations:", ln=True)
+        pdf.set_font("Arial", "", 8)
+        for line_text in ai_report.split("\n"):
+            stripped = line_text.strip()
+            if stripped.startswith("|"):
+                parts = [p.strip() for p in stripped.split("|") if p.strip()]
+                if len(parts) >= 4 and "Prioridad" not in parts[0] and "---" not in parts[0]:
+                    raw_line = f"- [{parts[0]}] {parts[1]} (Resp: {parts[2]} | Plazo: {parts[3]})"
+                else:
+                    continue
+            else:
+                raw_line = _normalize_report_line(stripped)
+                if not raw_line:
+                    pdf.ln(3)
+                    continue
+
+            safe_text = raw_line.encode("latin-1", "replace").decode("latin-1")
+            pdf.set_x(10)
+            pdf.multi_cell(190, 5, safe_text, new_x="LMARGIN", new_y="NEXT")
+
+    return bytes(pdf.output())
+
+
+def _build_html_report(target: str, elapsed: float, results: List[Dict[str, Any]], ai_report: str) -> str:
+    total_ports_count = len(results)
+    high_risks_count = sum(
+        1 for r in results if "ALTO" in str(r["Riesgo"]).upper() or "🔴" in str(r["Riesgo"])
+    )
+    med_low_count = total_ports_count - high_risks_count
+
+    safe_target = html.escape(str(target), quote=True)
+    safe_timestamp = html.escape(datetime.now().strftime("%Y-%m-%d %H:%M:%S"), quote=True)
+
+    port_cards_html = ""
+    for r in results:
+        risk_val = str(r["Riesgo"])
+        if "ALTO" in risk_val.upper() or "🔴" in risk_val:
+            css_risk = "risk-high"
+        elif "MEDIO" in risk_val.upper() or "🟡" in risk_val:
+            css_risk = "risk-med"
+        else:
+            css_risk = "risk-low"
+
+        clean_risk_text = html.escape(
+            risk_val.replace("🔴 ", "").replace("🟡 ", "").replace("🟢 ", ""),
+            quote=True,
+        )
+        safe_port = html.escape(str(r["Puerto"]), quote=True)
+        safe_service = html.escape(str(r["Servicio"]), quote=True)
+        safe_os = html.escape(str(r["SO Estimado"]), quote=True)
+        safe_banner = html.escape(str(r["Banner / Versión"]), quote=True)
+        safe_vulns = html.escape(str(r["CVEs / Riesgos"]), quote=True)
+
+        port_cards_html += (
+            f'<div class="port-card">'
+            f'<div>'
+            f'<span class="port-badge">Puerto {safe_port} ({safe_service})</span><br>'
+            f'<span style="font-size: 13px; color: var(--text-muted);">'
+            f"SO Estimado: {safe_os} | Versión: {safe_banner}"
+            f"</span><br>"
+            f'<span style="font-size: 12px; color: var(--text-muted);">'
+            f"CVEs / Riesgos: {safe_vulns}"
+            f"</span>"
+            f"</div>"
+            f'<div><span class="risk-tag {css_risk}">{clean_risk_text}</span></div>'
+            f"</div>\n"
+        )
+
+    ai_section_html = ""
+    if ai_report:
+        safe_ai_report = html.escape(ai_report, quote=True)
+        ai_section_html = (
+            '<h2 onclick="toggleSection(\'aiSection\')" style="margin-top: 25px;">'
+            "🤖 Informe Ejecutivo y Hardening (Groq AI) <span>▼</span></h2>"
+            '<div id="aiSection" class="collapsible-content" style="max-height: 2000px;">'
+            '<div class="ai-wrapper">'
+            '<button id="copyBtn" class="copy-btn" onclick="copyAiReport()">📋 Copiar Informe</button>'
+            f'<div id="aiReportText" class="ai-report">{safe_ai_report}</div>'
+            "</div></div>\n"
+        )
+
+    return f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reporte de Auditoría ATOMUM: {safe_target}</title>
+  <style>
+    :root {{
+      --bg-main: #0d1117;
+      --bg-card: #161b22;
+      --bg-hover: #21262d;
+      --border-color: #30363d;
+      --text-main: #c9d1d9;
+      --text-muted: #8b949e;
+      --accent-blue: #58a6ff;
+      --risk-high: #f85149;
+      --risk-med: #d29922;
+      --risk-low: #3fb950;
+    }}
+    body {{
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      margin: 0;
+      padding: 30px;
+      line-height: 1.6;
+    }}
+    .container {{
+      max-width: 1050px;
+      margin: auto;
+      background: var(--bg-card);
+      padding: 40px;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    }}
+    header {{
+      border-bottom: 2px solid var(--border-color);
+      padding-bottom: 20px;
+      margin-bottom: 25px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 15px;
+    }}
+    h1 {{ color: var(--accent-blue); font-size: 26px; margin: 0; }}
+    .kpi-container {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 30px;
+    }}
+    .kpi-card {{
+      background: var(--bg-hover);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 15px;
+      text-align: center;
+    }}
+    .kpi-value {{
+      font-size: 24px;
+      font-weight: bold;
+      font-family: monospace;
+      color: var(--accent-blue);
+      margin-top: 5px;
+    }}
+    .kpi-value.danger {{ color: var(--risk-high); }}
+    .kpi-title {{
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }}
+    h2 {{
+      color: #7ee787;
+      font-size: 18px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 8px;
+      margin-top: 35px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }}
+    .port-grid {{ display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 25px; }}
+    .port-card {{
+      background: var(--bg-hover);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 15px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      transition: border-color 0.2s;
+    }}
+    .port-card:hover {{ border-color: var(--accent-blue); }}
+    .port-badge {{ font-weight: bold; font-family: monospace; font-size: 15px; color: var(--accent-blue); }}
+    .risk-tag {{ padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; text-transform: uppercase; }}
+    .risk-high {{ background: rgba(248, 81, 73, 0.15); color: var(--risk-high); border: 1px solid var(--risk-high); }}
+    .risk-med {{ background: rgba(210, 153, 34, 0.15); color: var(--risk-med); border: 1px solid var(--risk-med); }}
+    .risk-low {{ background: rgba(63, 185, 80, 0.15); color: var(--risk-low); border: 1px solid var(--risk-low); }}
+    .ai-wrapper {{ position: relative; margin-top: 15px; }}
+    .copy-btn {{
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: #30363d;
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }}
+    .copy-btn:hover {{ background: var(--accent-blue); color: #fff; }}
+    .ai-report {{
+      background: var(--bg-main);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 25px;
+      padding-top: 45px;
+      white-space: pre-wrap;
+      font-size: 13.5px;
+      color: #d2d6dc;
+      font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace;
+      max-height: 600px;
+      overflow-y: auto;
+    }}
+    .collapsible-content {{ overflow: hidden; transition: max-height 0.3s ease-out; }}
+    footer {{
+      margin-top: 45px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border-color);
+      padding-top: 20px;
+    }}
+  </style>
+  <script>
+    function toggleSection(id) {{
+      var content = document.getElementById(id);
+      if (content.style.maxHeight) {{
+        content.style.maxHeight = null;
+      }} else {{
+        content.style.maxHeight = content.scrollHeight + "px";
+      }}
+    }}
+    function copyAiReport() {{
+      var text = document.getElementById("aiReportText").innerText;
+      navigator.clipboard.writeText(text).then(function() {{
+        var btn = document.getElementById("copyBtn");
+        btn.innerText = "¡Copiado! ✅";
+        setTimeout(function() {{ btn.innerText = "📋 Copiar Informe"; }}, 2000);
+      }});
+    }}
+  </script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>🛡️ Reporte de Auditoría ATOMUM</h1>
+        <div style="font-size: 14px; color: var(--text-muted); margin-top: 4px;">
+          Objetivo analizado: <strong style="color: var(--accent-blue);">{safe_target}</strong>
+        </div>
+      </div>
+      <div style="text-align: right; font-size: 13px; color: var(--text-muted);">
+        📅 {safe_timestamp}<br>
+        ⏱️ Tiempo: {elapsed:.2f}s
+      </div>
+    </header>
+
+    <div class="kpi-container">
+      <div class="kpi-card">
+        <div class="kpi-title">Puertos Abiertos</div>
+        <div class="kpi-value">{total_ports_count}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Hallazgos Críticos (Alto)</div>
+        <div class="kpi-value danger">{high_risks_count}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Riesgo Moderado / Bajo</div>
+        <div class="kpi-value">{med_low_count}</div>
+      </div>
+    </div>
+
+    <h2 onclick="toggleSection('portsSection')">📊 Puertos Abiertos y Hallazgos <span>▼</span></h2>
+    <div id="portsSection" class="collapsible-content" style="max-height: 1000px;">
+      <div class="port-grid" style="margin-top: 15px;">
+        {port_cards_html}
+      </div>
+    </div>
+
+    {ai_section_html}
+
+    <footer>
+      ATOMUM Modular Core v2.0 &bull; Motor Activo: Groq Cloud Engine &bull; Auditoría Autónoma de Seguridad
+    </footer>
+  </div>
+</body>
+</html>"""
 
 
 def render_port_scanner_tab() -> None:
@@ -73,12 +494,18 @@ def render_port_scanner_tab() -> None:
         with col_opt1:
             concurrency = st.slider(
                 "Concurrencia simultánea (Manual)",
-                min_value=10, max_value=1000, value=150, step=10,
+                min_value=10,
+                max_value=1000,
+                value=150,
+                step=10,
             )
         with col_opt2:
             timeout = st.slider(
                 "Timeout por socket en segundos (Manual)",
-                min_value=0.5, max_value=5.0, value=1.5, step=0.5,
+                min_value=0.5,
+                max_value=5.0,
+                value=1.5,
+                step=0.5,
             )
 
         submitted = st.form_submit_button("Iniciar Auditoría de Puertos 🚀")
@@ -94,9 +521,8 @@ def render_port_scanner_tab() -> None:
             st.error(f"❌ Objetivo bloqueado por seguridad: {resolved_or_error}")
             return
 
-        # Reconocimiento previo de DNS
         with st.spinner("🌐 Resolviendo registros DNS y metadatos del objetivo..."):
-            dns_info = {}
+            dns_info: Dict[str, Any] = {}
             try:
                 ip_info = socket.gethostbyname_ex(raw_target)
                 dns_info["Canonical Name"] = ip_info[0]
@@ -118,30 +544,33 @@ def render_port_scanner_tab() -> None:
             ports_list = list(range(1, 65536))
             effective_concurrency = max(concurrency, 500)
             effective_timeout = timeout
-            st.warning(f"🚀 Full Scan activado: auditando los 65.535 puertos a velocidad máxima (concurrencia={effective_concurrency}).")
+            st.warning(
+                f"🚀 Full Scan activado: auditando los 65.535 puertos a velocidad máxima "
+                f"(concurrencia={effective_concurrency})."
+            )
         elif "Modo Animal" in scan_profile:
             ports_list = list(range(1, 65536))
             effective_concurrency = min(concurrency, 15)
             effective_timeout = max(timeout, 3.0)
             st.warning(
-                f"🦁 Modo Animal activado: barrido completo de 65.535 puertos con concurrencia reducida ({effective_concurrency}) "
-                f"y timeout extendido ({effective_timeout}s). Este proceso demorará unos minutos."
+                f"🦁 Modo Animal activado: barrido completo de 65.535 puertos con concurrencia reducida "
+                f"({effective_concurrency}) y timeout extendido ({effective_timeout}s). "
+                f"Este proceso demorará unos minutos."
             )
         else:
             effective_concurrency = concurrency
             effective_timeout = timeout
             ports_list = parse_port_range(ports_input)
-
-        if not ports_list:
-            st.error("❌ El formato de puertos especificado es inválido.")
-            return
+            if not ports_list:
+                st.error("❌ El formato de puertos especificado es inválido.")
+                return
 
         total_ports = len(ports_list)
         st.info(f"Puertos totales configurados para auditar en `{resolved_or_error}`: **{total_ports}**")
 
         progress_bar = st.progress(0)
         status_text = st.empty()
-        open_ports_data = []
+        open_ports_data: List[Dict[str, Any]] = []
         scanned_count = 0
 
         def update_progress() -> None:
@@ -153,19 +582,19 @@ def render_port_scanner_tab() -> None:
 
         def handle_open(result: BannerResult) -> None:
             _host, port, _is_open, banner, service, os_guess, vulns = result
-            risk = (
-                "🔴 Alto" if port in (21, 22, 23, 445, 3389) else
-                ("🟡 Medio" if port in (80, 443, 3000, 3306, 5432, 6379, 8080) else "🟢 Bajo")
+            vulns_str = vulns if isinstance(vulns, str) else ", ".join(vulns)
+            risk = _classify_risk(port, vulns_str)
+            open_ports_data.append(
+                {
+                    "Puerto": port,
+                    "Estado": "Abierto",
+                    "Servicio": service,
+                    "SO Estimado": os_guess,
+                    "Riesgo": risk,
+                    "Banner / Versión": banner or "Desconocido",
+                    "CVEs / Riesgos": vulns_str,
+                }
             )
-            open_ports_data.append({
-                "Puerto": port,
-                "Estado": "Abierto",
-                "Servicio": service,
-                "SO Estimado": os_guess,
-                "Riesgo": risk,
-                "Banner / Versión": banner or "Desconocido",
-                "CVEs / Riesgos": vulns if isinstance(vulns, str) else ", ".join(vulns),
-            })
             update_progress()
 
         def handle_close(_result: PortResult) -> None:
@@ -198,9 +627,9 @@ def render_port_scanner_tab() -> None:
             del st.session_state["scanner_last_ai_report"]
 
     if "scanner_last_results" in st.session_state:
-        results = st.session_state["scanner_last_results"]
-        last_target = st.session_state.get("scanner_last_target", "")
-        elapsed = st.session_state.get("scanner_last_elapsed", 0.0)
+        results: List[Dict[str, Any]] = st.session_state["scanner_last_results"]
+        last_target: str = st.session_state.get("scanner_last_target", "")
+        elapsed: float = st.session_state.get("scanner_last_elapsed", 0.0)
 
         st.success(f"✅ Auditoría sobre `{last_target}` completada en {elapsed:.2f} segundos.")
 
@@ -209,8 +638,7 @@ def render_port_scanner_tab() -> None:
             st.markdown("### 📊 Puertos Abiertos y Hallazgos")
             st.dataframe(df, use_container_width=True)
 
-            ai_report_content = st.session_state.get("scanner_last_ai_report", "")
-
+            ai_report_content: str = st.session_state.get("scanner_last_ai_report", "")
             if st.button("📝 Generar Informe Ejecutivo con IA (Groq)"):
                 with st.spinner("🤖 Analizando superficie de ataque y redactando informe técnico detallado..."):
                     prompt_ai = (
@@ -234,13 +662,12 @@ def render_port_scanner_tab() -> None:
                 st.markdown("### 📋 Informe de Seguridad (Groq AI)")
                 st.markdown(ai_report_content)
 
-            # Módulo de Exportación Multiformato
             st.markdown("---")
             st.markdown("### 📥 Exportar Resultados de Auditoría")
             export_format = st.selectbox(
                 "Selecciona el formato de exportación",
                 options=["CSV", "JSON", "Word (.docx)", "PDF", "HTML Interactivo (.html)"],
-                index=0
+                index=0,
             )
 
             if export_format == "CSV":
@@ -249,406 +676,55 @@ def render_port_scanner_tab() -> None:
                     label="⬇️ Descargar Reporte en CSV",
                     data=csv_data,
                     file_name=f"atomum_audit_{last_target}.csv",
-                    mime="text/csv"
+                    mime="text/csv",
                 )
-
             elif export_format == "JSON":
-                json_data = json.dumps({
-                    "target": last_target,
-                    "elapsed_seconds": elapsed,
-                    "results": results,
-                    "ai_report": ai_report_content
-                }, indent=4, ensure_ascii=False).encode("utf-8")
+                json_data = json.dumps(
+                    {
+                        "target": last_target,
+                        "elapsed_seconds": elapsed,
+                        "results": results,
+                        "ai_report": ai_report_content,
+                    },
+                    indent=4,
+                    ensure_ascii=False,
+                ).encode("utf-8")
                 st.download_button(
                     label="⬇️ Descargar Reporte en JSON",
                     data=json_data,
                     file_name=f"atomum_audit_{last_target}.json",
-                    mime="application/json"
+                    mime="application/json",
                 )
-
             elif export_format == "Word (.docx)":
                 try:
-                    from docx import Document
-                    doc = Document()
-                    doc.add_heading(f"Reporte de Auditoría ATOMUM: {last_target}", 0)
-                    doc.add_paragraph(f"Fecha de ejecución: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                    doc.add_paragraph(f"Tiempo de escaneo: {elapsed:.2f} segundos")
-                    doc.add_heading("Hallazgos de Puertos Abiertos", level=1)
-                    for r in results:
-                        clean_risk = r['Riesgo'].replace('🔴 ', '[ALTO] ').replace('🟡 ', '[MEDIO] ').replace('🟢 ', '[BAJO] ')
-                        doc.add_paragraph(
-                            f"Puerto: {r['Puerto']} | Estado: {r['Estado']} | Servicio: {r['Servicio']} | "
-                            f"SO: {r['SO Estimado']} | Riesgo: {clean_risk} | Versión: {r['Banner / Versión']}",
-                            style='List Bullet'
-                        )
-                    if ai_report_content:
-                        doc.add_heading("Informe Ejecutivo y Hardening (Groq AI)", level=1)
-                        for line_text in ai_report_content.split("\n"):
-                            for line_text in ai_report_content.split("\n"):
-                                if line_text.strip().startswith("|"):
-                                    parts = [p.strip() for p in line_text.split("|") if p.strip()]
-                                    if len(parts) >= 4 and "Prioridad" not in parts[0] and "---" not in parts[0]:
-                                        row_str = f"[{parts[0]}] {parts[1]} (Responsable: {parts[2]} | Plazo: {parts[3]})"
-                                        doc.add_paragraph(row_str, style='List Bullet')
-                                    continue
-                                cleaned_text = re.sub(r'[*#_`]', '', line_text)
-                                cleaned_text = (
-                                    cleaned_text.replace('→', '->')
-                                    .replace('–', '-')
-                                    .replace('—', '-')
-                                    .replace('•', '-')
-                                    .replace('≥', '>=')
-                                    .replace('‑', '-')
-                                )
-                                if not cleaned_text.strip():
-                                    continue
-                                if any(cleaned_text.strip().startswith(prefix) for prefix in ["1.", "2.", "3.", "4.", "5.", "Conclusión"]):
-                                    doc.add_heading(cleaned_text.strip(), level=2)
-                                elif cleaned_text.strip().startswith("-") or cleaned_text.strip().startswith("•"):
-                                    doc.add_paragraph(cleaned_text.strip().lstrip("- •"), style='List Bullet')
-                                else:
-                                    doc.add_paragraph(cleaned_text.strip())
-
-                    bio = io.BytesIO()
-                    doc.save(bio)
-                    bio.seek(0)
+                    docx_bytes = _build_docx_bytes(last_target, elapsed, results, ai_report_content)
                     st.download_button(
                         label="⬇️ Descargar Reporte en Word (.docx)",
-                        data=bio.getvalue(),
+                        data=docx_bytes,
                         file_name=f"atomum_audit_{last_target}.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     )
                 except ImportError:
                     st.warning("⚠️ La librería `python-docx` no está disponible en el entorno.")
-
             elif export_format == "PDF":
                 try:
-                    from fpdf import FPDF
-                    pdf = FPDF()
-                    pdf.add_page()
-                    pdf.set_margins(left=10, top=10, right=10)
-                    pdf.set_font("Arial", "B", 16)
-                    pdf.cell(190, 10, f"ATOMUM Security Audit: {last_target}", ln=True)
-                    pdf.set_font("Arial", "", 10)
-                    pdf.cell(190, 10, f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Elapsed: {elapsed:.2f}s", ln=True)
-                    pdf.ln(5)
-                    pdf.set_font("Arial", "B", 12)
-                    pdf.cell(190, 10, "Open Ports & Findings:", ln=True)
-                    pdf.set_font("Arial", "", 9)
-                    for r in results:
-                        clean_risk = r['Riesgo'].replace('🔴 ', '[ALTO] ').replace('🟡 ', '[MEDIO] ').replace('🟢 ', '[BAJO] ')
-                        line = f"Port: {r['Puerto']} | Serv: {r['Servicio']} | OS: {r['SO Estimado']} | Risk: {clean_risk}"
-                        safe_line = line.encode('latin-1', 'replace').decode('latin-1')
-                        pdf.cell(190, 6, safe_line, ln=True)
-
-                    if ai_report_content:
-                        pdf.ln(5)
-                        pdf.set_font("Arial", "B", 12)
-                        pdf.cell(190, 10, "AI Security Recommendations:", ln=True)
-                        pdf.set_font("Arial", "", 8)
-                        for line_text in ai_report_content.split("\n"):
-                            if line_text.strip().startswith("|"):
-                                parts = [p.strip() for p in line_text.split("|") if p.strip()]
-                                if len(parts) >= 4 and "Prioridad" not in parts[0] and "---" not in parts[0]:
-                                    line_text = f"• [{parts[0]}] {parts[1]} (Resp: {parts[2]} | Plazo: {parts[3]})"
-                                else:
-                                    continue
-                            cleaned_text = re.sub(r'[*#_`]', '', line_text)
-                            cleaned_text = (
-                                cleaned_text.replace('→', '->')
-                                .replace('–', '-')
-                                .replace('—', '-')
-                                .replace('•', '-')
-                                .replace('≥', '>=')
-                                .replace('‑', '-')
-                            )
-                            cleaned_text = cleaned_text.replace('\u202f', ' ').replace('\u00a0', ' ')
-                            safe_text = cleaned_text.encode('latin-1', 'replace').decode('latin-1')
-                            if not safe_text.strip():
-                                pdf.ln(3)
-                                continue
-                            pdf.set_x(10)
-                            pdf.multi_cell(190, 5, safe_text.strip(), new_x="LMARGIN", new_y="NEXT")
-
-                    pdf_output = bytes(pdf.output())
+                    pdf_bytes = _build_pdf_bytes(last_target, elapsed, results, ai_report_content)
                     st.download_button(
                         label="⬇️ Descargar Reporte en PDF",
-                        data=pdf_output,
+                        data=pdf_bytes,
                         file_name=f"atomum_audit_{last_target}.pdf",
-                        mime="application/pdf"
+                        mime="application/pdf",
                     )
                 except ImportError:
                     st.warning("⚠️ La librería `fpdf2` no está disponible en el entorno.")
-
             elif export_format == "HTML Interactivo (.html)":
                 try:
-                    total_ports_count = len(results)
-                    high_risks_count = sum(1 for r in results if "ALTO" in r['Riesgo'].upper() or "🔴" in r['Riesgo'])
-                    med_low_count = total_ports_count - high_risks_count
-
-                    html_content = f"""<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reporte de Auditoría ATOMUM: {last_target}</title>
-    <style>
-        :root {{
-            --bg-main: #0d1117;
-            --bg-card: #161b22;
-            --bg-hover: #21262d;
-            --border-color: #30363d;
-            --text-main: #c9d1d9;
-            --text-muted: #8b949e;
-            --accent-blue: #58a6ff;
-            --risk-high: #f85149;
-            --risk-med: #d29922;
-            --risk-low: #3fb950;
-        }}
-        body {{
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-main);
-            color: var(--text-main);
-            margin: 0;
-            padding: 30px;
-            line-height: 1.6;
-        }}
-        .container {{
-            max-width: 1050px;
-            margin: auto;
-            background: var(--bg-card);
-            padding: 40px;
-            border-radius: 12px;
-            border: 1px solid var(--border-color);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
-        }}
-        header {{
-            border-bottom: 2px solid var(--border-color);
-            padding-bottom: 20px;
-            margin-bottom: 25px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 15px;
-        }}
-        h1 {{
-            color: var(--accent-blue);
-            font-size: 26px;
-            margin: 0;
-        }}
-        .kpi-container {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 30px;
-        }}
-        .kpi-card {{
-            background: var(--bg-hover);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 15px;
-            text-align: center;
-        }}
-        .kpi-value {{
-            font-size: 24px;
-            font-weight: bold;
-            font-family: monospace;
-            color: var(--accent-blue);
-            margin-top: 5px;
-        }}
-        .kpi-value.danger {{ color: var(--risk-high); }}
-        .kpi-title {{
-            font-size: 12px;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }}
-        h2 {{
-            color: #7ee787;
-            font-size: 18px;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 8px;
-            margin-top: 35px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-            user-select: none;
-        }}
-        .port-grid {{
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 12px;
-            margin-bottom: 25px;
-        }}
-        .port-card {{
-            background: var(--bg-hover);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 15px 20px;
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: space-between;
-            align-items: center;
-            transition: border-color 0.2s;
-        }}
-        .port-card:hover {{
-            border-color: var(--accent-blue);
-        }}
-        .port-badge {{
-            font-weight: bold;
-            font-family: monospace;
-            font-size: 15px;
-            color: var(--accent-blue);
-        }}
-        .risk-tag {{
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }}
-        .risk-high {{ background: rgba(248, 81, 73, 0.15); color: var(--risk-high); border: 1px solid var(--risk-high); }}
-        .risk-med {{ background: rgba(210, 153, 34, 0.15); color: var(--risk-med); border: 1px solid var(--risk-med); }}
-        .risk-low {{ background: rgba(63, 185, 80, 0.15); color: var(--risk-low); border: 1px solid var(--risk-low); }}
-        .ai-wrapper {{
-            position: relative;
-            margin-top: 15px;
-        }}
-        .copy-btn {{
-            position: absolute;
-            top: 12px;
-            right: 12px;
-            background: #30363d;
-            color: var(--text-main);
-            border: 1px solid var(--border-color);
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: background 0.2s;
-        }}
-        .copy-btn:hover {{
-            background: var(--accent-blue);
-            color: #fff;
-        }}
-        .ai-report {{
-            background: var(--bg-main);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 25px;
-            padding-top: 45px;
-            white-space: pre-wrap;
-            font-size: 13.5px;
-            color: #d2d6dc;
-            font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace;
-            max-height: 600px;
-            overflow-y: auto;
-        }}
-        .collapsible-content {{
-            overflow: hidden;
-            transition: max-height 0.3s ease-out;
-        }}
-        footer {{
-            margin-top: 45px;
-            text-align: center;
-            font-size: 12px;
-            color: var(--text-muted);
-            border-top: 1px solid var(--border-color);
-            padding-top: 20px;
-        }}
-    </style>
-    <script>
-        function toggleSection(id) {{
-            var content = document.getElementById(id);
-            if (content.style.maxHeight) {{
-                content.style.maxHeight = null;
-            }} else {{
-                content.style.maxHeight = content.scrollHeight + "px";
-            }}
-        }}
-        function copyAiReport() {{
-            var text = document.getElementById("aiReportText").innerText;
-            navigator.clipboard.writeText(text).then(function() {{
-                var btn = document.getElementById("copyBtn");
-                btn.innerText = "¡Copiado! ✅";
-                setTimeout(function() {{ btn.innerText = "📋 Copiar Informe"; }}, 2000);
-            }});
-        }}
-    </script>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <div>
-                <h1>🛡️ Reporte de Auditoría ATOMUM</h1>
-                <div style="font-size: 14px; color: var(--text-muted); margin-top: 4px;">Objetivo analizado: <strong style="color: var(--accent-blue);">{last_target}</strong></div>
-            </div>
-            <div style="text-align: right; font-size: 13px; color: var(--text-muted);">
-                📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br>
-                ⏱️ Tiempo: {elapsed:.2f}s
-            </div>
-        </header>
-
-        <div class="kpi-container">
-            <div class="kpi-card">
-                <div class="kpi-title">Puertos Abiertos</div>
-                <div class="kpi-value">{total_ports_count}</div>
-            </div>
-            <div class="kpi-card">
-                <div class="kpi-title">Hallazgos Críticos (Alto)</div>
-                <div class="kpi-value danger">{high_risks_count}</div>
-            </div>
-            <div class="kpi-card">
-                <div class="kpi-title">Riesgo Moderado / Bajo</div>
-                <div class="kpi-value">{med_low_count}</div>
-            </div>
-        </div>
-
-        <h2 onclick="toggleSection('portsSection')">📊 Puertos Abiertos y Hallazgos <span>▼</span></h2>
-        <div id="portsSection" class="collapsible-content" style="max-height: 1000px;">
-            <div class="port-grid" style="margin-top: 15px;">
-"""
-                    for r in results:
-                        risk_val = r['Riesgo']
-                        css_risk = "risk-high" if "ALTO" in risk_val.upper() or "🔴" in risk_val else ("risk-med" if "MEDIO" in risk_val.upper() or "🟡" in risk_val else "risk-low")
-                        clean_risk_text = risk_val.replace('🔴 ', '').replace('🟡 ', '').replace('🟢 ', '')
-                        
-                        html_content += f"""                <div class="port-card">
-                    <div>
-                        <span class="port-badge">Puerto {r['Puerto']} ({r['Servicio']})</span><br>
-                        <span style="font-size: 13px; color: var(--text-muted);">SO Estimado: {r['SO Estimado']} | Versión: {r['Banner / Versión']}</span>
-                    </div>
-                    <div>
-                        <span class="risk-tag {css_risk}">{clean_risk_text}</span>
-                    </div>
-                </div>\n"""
-
-                    html_content += """            </div>
-        </div>\n"""
-
-                    if ai_report_content:
-                        html_content += f"""        <h2 onclick="toggleSection('aiSection')" style="margin-top: 25px;">🤖 Informe Ejecutivo y Hardening (Groq AI) <span>▼</span></h2>
-        <div id="aiSection" class="collapsible-content" style="max-height: 2000px;">
-            <div class="ai-wrapper">
-                <button id="copyBtn" class="copy-btn" onclick="copyAiReport()">📋 Copiar Informe</button>
-                <div id="aiReportText" class="ai-report">{ai_report_content}</div>
-            </div>
-        </div>\n"""
-
-                    html_content += f"""        <footer>
-            ATOMUM Modular Core v2.0 &bull; Motor Activo: Groq Cloud Engine &bull; Auditoría Autónoma de Seguridad
-        </footer>
-    </div>
-</body>
-</html>"""
-
+                    html_content = _build_html_report(last_target, elapsed, results, ai_report_content)
                     st.download_button(
                         label="⬇️ Descargar Reporte HTML Corporativo Avanzado (.html)",
-                        data=html_content.encode('utf-8'),
+                        data=html_content.encode("utf-8"),
                         file_name=f"atomum_audit_{last_target}.html",
-                        mime="text/html"
+                        mime="text/html",
                     )
                 except Exception as e:
                     st.error(f"⚠️ Error generando el reporte HTML corporativo: {e}")
