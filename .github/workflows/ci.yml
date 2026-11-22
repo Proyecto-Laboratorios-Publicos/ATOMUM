@@ -9,6 +9,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -17,10 +19,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
 
       - name: Install Poetry and dependencies
         run: |
-          pip install --upgrade pip poetry
+          python -m pip install --upgrade pip poetry
           poetry config virtualenvs.create false
           poetry install --no-interaction --no-ansi
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
@@ -36,6 +39,8 @@ jobs:
   docker-build:
     runs-on: ubuntu-latest
     needs: test
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
