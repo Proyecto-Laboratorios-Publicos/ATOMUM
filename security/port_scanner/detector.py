@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional
 
+from security.cve_cbom import CBOMAnalyzer
+
 
 class PortState(str, Enum):
     CONFIRMED_OPEN = "confirmed_open"
@@ -57,6 +59,7 @@ class HardenedPortDetector:
         per_probe_delay: float = 0.02,
         anomaly_open_threshold: int = 25,
         enable_active_probe: bool = True,
+        crypto_analyzer: Optional[CBOMAnalyzer] = None,
     ) -> None:
         self.timeout = max(0.2, timeout)
         self.banner_timeout = max(0.1, banner_timeout)
@@ -64,6 +67,7 @@ class HardenedPortDetector:
         self.per_probe_delay = max(0.0, per_probe_delay)
         self.anomaly_open_threshold = max(1, anomaly_open_threshold)
         self.enable_active_probe = enable_active_probe
+        self._crypto_analyzer = crypto_analyzer or CBOMAnalyzer()
 
     def _build_ssl_context(self, verify: bool = True) -> ssl.SSLContext:
         ctx = ssl.create_default_context() if verify else ssl._create_unverified_context()
@@ -124,6 +128,23 @@ class HardenedPortDetector:
             await self._close_writer(writer)
             raise
 
+    def _attach_cbom_metadata(self, host: str, port: int, meta: Dict[str, object]) -> None:
+        if not (meta.get("tls_version") or meta.get("cipher_suite")):
+            return
+        try:
+            cbom_asset = self._crypto_analyzer.inspect_crypto_observation(
+                target=host,
+                observed_crypto={
+                    "tls_version": meta.get("tls_version"),
+                    "cipher_suite": meta.get("cipher_suite"),
+                },
+                port=port,
+                protocol="tls",
+            )
+            meta["cbom"] = cbom_asset.model_dump(mode="json")
+        except Exception:
+            pass
+
     async def _read_banner_or_probe(
         self,
         host: str,
@@ -135,9 +156,14 @@ class HardenedPortDetector:
         try:
             data = await asyncio.wait_for(reader.read(256), timeout=self.banner_timeout)
             if data:
-                lines = [ln.strip() for ln in data.decode("utf-8", errors="replace").splitlines() if ln.strip()]
+                lines = [
+                    ln.strip()
+                    for ln in data.decode("utf-8", errors="replace").splitlines()
+                    if ln.strip()
+                ]
                 if lines:
                     meta["probe_mode"] = "passive"
+                    self._attach_cbom_metadata(host, port, meta)
                     return _sanitize_banner(lines[0])
         except (asyncio.TimeoutError, TimeoutError, OSError):
             pass
@@ -152,16 +178,25 @@ class HardenedPortDetector:
                 await writer.drain()
                 data = await asyncio.wait_for(reader.read(512), timeout=self.banner_timeout)
                 if data:
-                    lines = [ln.strip() for ln in data.decode("utf-8", errors="replace").splitlines() if ln.strip()]
+                    lines = [
+                        ln.strip()
+                        for ln in data.decode("utf-8", errors="replace").splitlines()
+                        if ln.strip()
+                    ]
                     if lines:
                         meta["probe_mode"] = "http_head"
-                        server_hdr = next((ln for ln in lines if ln.lower().startswith("server:")), None)
+                        server_hdr = next(
+                            (ln for ln in lines if ln.lower().startswith("server:")),
+                            None,
+                        )
+                        self._attach_cbom_metadata(host, port, meta)
                         return _sanitize_banner(server_hdr or lines[0])
             except (asyncio.TimeoutError, TimeoutError, OSError):
                 pass
 
         if meta.get("tls_version"):
             meta["probe_mode"] = "tls_handshake"
+            self._attach_cbom_metadata(host, port, meta)
             cert_status = "cert_ok" if meta.get("tls_cert_verified") else "cert_unverified"
             return _sanitize_banner(f"TLS {meta['tls_version']} ({cert_status})")
 
