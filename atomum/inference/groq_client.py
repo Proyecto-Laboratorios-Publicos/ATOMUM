@@ -25,7 +25,7 @@ class GroqInferenceClient(InferenceEngine):
 
             messages = payload.get("messages", [])
             temperature = payload.get("temperature", 0.7)
-            max_tokens = payload.get("max_tokens", 1024)
+            max_tokens = payload.get("max_tokens", 16384)
 
             # Llamada al SDK oficial de Groq con el modelo blindado
             chat_completion = self.client.chat.completions.create(
