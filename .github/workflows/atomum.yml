@@ -3,48 +3,48 @@ name: CI – GitOps Engine
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: gitops-engine-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   run-engine:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
 
-    # 1️⃣  Checkout *toda* la rama (no shallow)
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0          # <-- necesario si el engine usa git history
-          # path: .                # <-- opcional, por claridad
+          fetch-depth: 0
 
-      # 2️⃣  Configurar Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
+          cache: "pip"
 
-      # 3️⃣  Instalar dependencias (requirements.txt en la raíz)
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-        # No se cambia el working-directory → sigue en la raíz
 
-      # 4️⃣  **Ejecutar el motor** – forzamos el working-directory a la raíz
       - name: Ejecutar GitOps Engine
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          REPO_URL: ${{ secrets.REPO_URL }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          REPO_URL: ${{ secrets.REPO_URL || github.repositoryUrl }}
           GITHUB_WORKSPACE: ${{ github.workspace }}
+          PYTHONPATH: "."
         run: |
           python core/gitops_engine.py
-        # Si el entry‑point ya está en la raíz:
-        #   run: python engine.py
 
-      # 5️⃣  (Opcional) Guardar artefactos de diagnóstico
       - name: Debug – list workspace
         if: failure()
         run: |
           echo "=== ${{ github.workspace }} ==="
-          ls -R ${{ github.workspace }}
+          find . -maxdepth 3 -not -path '*/.*'
