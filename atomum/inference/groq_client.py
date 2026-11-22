@@ -24,7 +24,7 @@ class GroqInferenceClient(InferenceEngine):
                 model_id = active_model
 
             messages = payload.get("messages", [])
-            temperature = payload.get("temperature", 0.7)
+            temperature = payload.get("temperature", 0.1)
             max_tokens = payload.get("max_tokens", 16384)
 
             # Llamada al SDK oficial de Groq con el modelo blindado
