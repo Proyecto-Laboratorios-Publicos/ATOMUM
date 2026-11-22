@@ -69,7 +69,7 @@ Pydantic (Validación de esquemas y tipos de datos)
 
 **1. Clonar el repositorio:**
    ```bash
-   git clone https://github.com/Proyecto-Laboratorios-Publicos/ATOMUM.git
+   git clone https://github.com/Proyecto-Laboratorios-Publicos/ATOMUM.git...
    cd ATOMUM
    ```
 
@@ -81,7 +81,7 @@ Pydantic (Validación de esquemas y tipos de datos)
 
 **3. Configurar variables de entorno (o secrets en Streamlit):**
    ```env
-   GROQ_API_KEY=tu_clave_de_api_aqui
+   GROQ_API_KEY=tu_clave_de_api_aqui...
    ATOMUM_LLM_MODEL=openai/gpt-oss-120b
    ```
 **4. Ejecutar la interfaz de control:**
