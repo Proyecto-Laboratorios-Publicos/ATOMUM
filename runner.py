@@ -105,8 +105,38 @@ class AutonomousRunner:
         return code + "\n" if code else ""
 
     @classmethod
+    def _close_dangling_blocks(cls, code: str) -> Optional[str]:
+        """Intenta cerrar un bloque try/except o estructuras abiertas al final del código."""
+        lines = code.splitlines()
+        if not lines:
+            return None
+
+        for idx in range(len(lines) - 1, -1, -1):
+            stripped = lines[idx].strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            indent = re.match(r"^(\s*)", lines[idx]).group(1)
+            if stripped.startswith("try:") and not any(
+                lines[j].lstrip().startswith(("except", "finally"))
+                for j in range(idx + 1, len(lines))
+            ):
+                if idx == len(lines) - 1:
+                    lines.append(f"{indent}    pass")
+                lines.append(f"{indent}except Exception:")
+                lines.append(f"{indent}    raise")
+                candidate = "\n".join(lines) + "\n"
+                try:
+                    ast.parse(candidate)
+                    return candidate
+                except SyntaxError:
+                    break
+            break
+
+        return None
+
+    @classmethod
     def _try_repair_unterminated_tail(cls, code: str) -> Optional[str]:
-        """Intenta cerrar strings, f-strings o delimitadores ({, [, () truncados al final."""
+        """Intenta cerrar strings, f-strings, delimitadores o bloques try truncados."""
         lines = code.splitlines()
         if not lines:
             return None
@@ -152,8 +182,9 @@ class AutonomousRunner:
                 ast.parse(repaired)
                 return repaired
             except SyntaxError:
-                return None
-        return None
+                pass
+
+        return cls._close_dangling_blocks(base)
 
     @classmethod
     def _merge_or_validate_code(cls, original_code: str, candidate_code: str) -> str:
