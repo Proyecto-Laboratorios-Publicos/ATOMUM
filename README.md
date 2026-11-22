@@ -24,7 +24,7 @@ Plataforma modular de ingeniería de IA y ciberseguridad ofensiva/defensiva dise
 
 - [ ] core/http_client.py: Cliente HTTP asíncrono robusto construido sobre aiohttp y aiohttp-retry. Cuenta con un único TCPConnector para reutilización de sockets (keep-alive), reintentos con back-off exponencial ante fallos de red y control estricto de concurrencia mediante semáforos. 
 
-- [ ] atomum/inference/ & runner.py: Capa de inferencia desacoplada (InferenceService / GroqInferenceClient) y orquestador autónomo (AutonomousRunner) con telemetría de consumo (usage y finish_reason), validación sintáctica por AST y creación automatizada de ramas y Pull Requests en GitHub.
+- [ ]  atomum/inference/ & runner.py: Capa de inferencia desacoplada (InferenceService / GroqInferenceClient) y orquestador autónomo (AutonomousRunner) con telemetría de consumo (usage y finish_reason), validación sintáctica por AST y creación automatizada de ramas y Pull Requests en GitHub.
 
 - [ ] security/port_scanner/: Escáner asíncrono de puertos de alto rendimiento con resolución DNS previa, banner grabbing en doble pasada, análisis de riesgos y exportación multiformato (CSV, JSON, Word, PDF y HTML Interactivo con KPIs y acordeones).
 
