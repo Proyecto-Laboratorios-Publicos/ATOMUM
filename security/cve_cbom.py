@@ -225,7 +225,7 @@ class CBOMAnalyzer:
         else:
             pqc_readiness = "hybrid_or_modern_tls_review"
 
-        asset_id = f"{target}:{port}" if port is not None else target
+        asset_id = f"{target}:{port}" if (port is not None and port > 0) else target
         return CBOMAsset(
             asset_id=asset_id,
             target=target,
@@ -239,3 +239,35 @@ class CBOMAnalyzer:
             pqc_readiness=pqc_readiness,
             posture_flags=flags,
         )
+
+
+def enrich_service_finding(
+    target: str,
+    port: int,
+    banner: str,
+    repository: Optional[OfflineCPERepository] = None,
+    crypto_analyzer: Optional[CBOMAnalyzer] = None,
+    observed_crypto: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Correlaciona un banner con CPE/CVEs y construye un CBOMAsset si hay telemetría."""
+    cpe_matches: List[CPEMatch] = repository.correlate_banner(banner) if repository else []
+    cves: List[str] = []
+    for match in cpe_matches:
+        for cve in match.cves:
+            if cve not in cves:
+                cves.append(cve)
+
+    cbom_asset: Optional[CBOMAsset] = None
+    if crypto_analyzer and observed_crypto:
+        cbom_asset = crypto_analyzer.inspect_crypto_observation(
+            target=target,
+            observed_crypto=observed_crypto,
+            port=port,
+            protocol="tls",
+        )
+
+    return {
+        "cpe_matches": cpe_matches,
+        "cves": cves,
+        "cbom_asset": cbom_asset,
+    }
