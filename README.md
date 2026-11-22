@@ -20,13 +20,13 @@ Plataforma modular de ingeniería de IA y ciberseguridad ofensiva/defensiva dise
 
 ## ⚙️ Componentes Clave (/core, /atomum & /security)
 
-- [ ] core/engine.py: Núcleo de procesamiento de directivas. Valida comandos mediante guardarraíses constitucionales y conecta de forma directa con la API de Groq con un límite optimizado de hasta 8192 tokens de salida.
+- core/engine.py: Núcleo de procesamiento de directivas. Valida comandos mediante guardarraíses constitucionales y conecta de forma directa con la API de Groq con un límite optimizado de hasta 8192 tokens de salida.
 
-- [ ] core/http_client.py: Cliente HTTP asíncrono robusto construido sobre aiohttp y aiohttp-retry. Cuenta con un único TCPConnector para reutilización de sockets (keep-alive), reintentos con back-off exponencial ante fallos de red y control estricto de concurrencia mediante semáforos. 
+- core/http_client.py: Cliente HTTP asíncrono robusto construido sobre aiohttp y aiohttp-retry. Cuenta con un único TCPConnector para reutilización de sockets (keep-alive), reintentos con back-off exponencial ante fallos de red y control estricto de concurrencia mediante semáforos. 
 
-- [ ]  atomum/inference/ & runner.py: Capa de inferencia desacoplada (InferenceService / GroqInferenceClient) y orquestador autónomo (AutonomousRunner) con telemetría de consumo (usage y finish_reason), validación sintáctica por AST y creación automatizada de ramas y Pull Requests en GitHub.
+- atomum/inference/ & runner.py: Capa de inferencia desacoplada (InferenceService / GroqInferenceClient) y orquestador autónomo (AutonomousRunner) con telemetría de consumo (usage y finish_reason), validación sintáctica por AST y creación automatizada de ramas y Pull Requests en GitHub.
 
-- [ ] security/port_scanner/: Escáner asíncrono de puertos de alto rendimiento con resolución DNS previa, banner grabbing en doble pasada, análisis de riesgos y exportación multiformato (CSV, JSON, Word, PDF y HTML Interactivo con KPIs y acordeones).
+- security/port_scanner/: Escáner asíncrono de puertos de alto rendimiento con resolución DNS previa, banner grabbing en doble pasada, análisis de riesgos y exportación multiformato (CSV, JSON, Word, PDF y HTML Interactivo con KPIs y acordeones).
 
 ## 🧬 Gobernanza Autónoma, Guardrails y Cuotas de Tokens
 
@@ -44,17 +44,17 @@ Nota Operativa (TPM / Tier Gratuito): El módulo de auto-mejora se encuentra fun
 
 ## ⚡ Stack Tecnológico
 
-- [ ] Python 3.11+
+- Python 3.11+
 
-- [ ] Streamlit (Interfaz gráfica de operaciones en tiempo real)
+- Streamlit (Interfaz gráfica de operaciones en tiempo real)
 
-- [ ] Groq API SDK (Inferencia ultrarrápida con modelos optimizados)
+- Groq API SDK (Inferencia ultrarrápida con modelos optimizados)
 
-- [ ] Aiohttp & Aiohttp-Retry (Gestión de red asíncrona de alto rendimiento)
+- Aiohttp & Aiohttp-Retry (Gestión de red asíncrona de alto rendimiento)
 
-- [ ] Pandas / PyPDF2 / Python-Docx (Procesamiento y exportación de informes)
+- Pandas / PyPDF2 / Python-Docx (Procesamiento y exportación de informes)
 
-- [ ] Pydantic (Validación de esquemas y tipos de datos)  
+- Pydantic (Validación de esquemas y tipos de datos)  
 
 
 ## 🗺️ Roadmap & Próximas Actualizaciones
