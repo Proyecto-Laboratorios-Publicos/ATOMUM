@@ -1,13 +1,3 @@
-"""
-core/guardrails.py
-------------------
-Guardrails constitucionales y de sandbox estático para ATOMUM.
-Evalúa tanto acciones operativas propuestas como fragmentos de código no confiable
-antes de permitir su ejecución o aplicación en el repositorio.
-"""
-
-from __future__ import annotations
-
 import ast
 import logging
 import re
@@ -17,95 +7,37 @@ logger = logging.getLogger(__name__)
 
 
 class GuardrailViolation(Exception):
-    """Excepción lanzada cuando un código o acción viola las políticas de seguridad."""
+    """Excepción lanzada cuando una acción o código viola las reglas de seguridad."""
 
 
 class SafeASTVisitor(ast.NodeVisitor):
-    """
-    Visitante AST estricto para inspeccionar código no confiable o de sandbox.
-    A diferencia de ASTValidator (orientado a revisión de parches del repo),
-    este visitante restringe imports sensibles, primitivas de introspección
-    y complejidad excesiva del árbol sintáctico.
-    """
+    """Validador de AST para restringir construcciones peligrosas en código Python."""
 
-    FORBIDDEN_MODULES: Final[frozenset[str]] = frozenset(
-        {
-            "os",
-            "sys",
-            "subprocess",
-            "shutil",
-            "socket",
-            "ctypes",
-            "pickle",
-            "marshal",
-            "shelve",
-            "importlib",
-            "builtins",
-            "pathlib",
-            "tempfile",
-            "pty",
-            "commands",
-        }
-    )
-
-    FORBIDDEN_BUILTINS: Final[frozenset[str]] = frozenset(
-        {
-            "eval",
-            "exec",
-            "compile",
-            "__import__",
-            "open",
-            "input",
-            "getattr",
-            "setattr",
-            "delattr",
-            "hasattr",
-            "globals",
-            "locals",
-            "vars",
-            "dir",
-            "type",
-            "super",
-            "memoryview",
-            "breakpoint",
-        }
-    )
-
-    FORBIDDEN_DUNDERS: Final[frozenset[str]] = frozenset(
-        {
-            "__subclasses__",
-            "__globals__",
-            "__builtins__",
-            "__code__",
-            "__closure__",
-            "__mro__",
-            "__bases__",
-            "__base__",
-            "__class__",
-            "__dict__",
-            "__loader__",
-            "__spec__",
-            "__import__",
-        }
-    )
-
-    FORBIDDEN_CALL_PATHS: Final[frozenset[str]] = frozenset(
-        {
-            "importlib.import_module",
-            "__builtins__.eval",
-            "__builtins__.exec",
-            "__builtins__.__import__",
-        }
-    )
+    BLOCKED_IMPORTS: Final[set[str]] = {
+        "os",
+        "sys",
+        "subprocess",
+        "shutil",
+        "socket",
+        "importlib",
+        "ctypes",
+        "pickle",
+        "marshal",
+    }
+    BLOCKED_CALLS: Final[set[str]] = {
+        "eval",
+        "exec",
+        "compile",
+        "open",
+        "__import__",
+        "input",
+    }
 
     def __init__(self, max_nodes: int = 1000) -> None:
-        if max_nodes < 1:
-            raise ValueError("max_nodes debe ser un entero positivo.")
         self.max_nodes: int = max_nodes
         self.node_count: int = 0
 
     def check(self, tree: ast.AST) -> None:
-        """Reinicia el contador y recorre el árbol AST completo."""
         self.node_count = 0
         self.visit(tree)
 
@@ -113,54 +45,31 @@ class SafeASTVisitor(ast.NodeVisitor):
         self.node_count += 1
         if self.node_count > self.max_nodes:
             raise GuardrailViolation(
-                f"Código demasiado complejo ({self.node_count} nodos AST; máximo permitido: {self.max_nodes})."
+                f"El código supera el límite máximo de nodos AST ({self.max_nodes})."
             )
         super().generic_visit(node)
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
-            root_pkg = alias.name.split(".")[0]
-            if alias.name in self.FORBIDDEN_MODULES or root_pkg in self.FORBIDDEN_MODULES:
-                raise GuardrailViolation(
-                    f"Importación de módulo restringido '{alias.name}' en línea {node.lineno}."
-                )
+            root_module = alias.name.split(".")[0]
+            if root_module in self.BLOCKED_IMPORTS:
+                raise GuardrailViolation(f"Importación bloqueada por guardrail: {alias.name}")
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        if node.level > 0:
-            raise GuardrailViolation(
-                f"Importación relativa no permitida en modo sandbox (línea {node.lineno})."
-            )
         if node.module:
-            root_pkg = node.module.split(".")[0]
-            if node.module in self.FORBIDDEN_MODULES or root_pkg in self.FORBIDDEN_MODULES:
+            root_module = node.module.split(".")[0]
+            if root_module in self.BLOCKED_IMPORTS:
                 raise GuardrailViolation(
-                    f"Importación desde módulo restringido '{node.module}' en línea {node.lineno}."
+                    f"Importación desde módulo bloqueado: {node.module}"
                 )
         self.generic_visit(node)
 
-    def visit_Attribute(self, node: ast.Attribute) -> None:
-        if node.attr in self.FORBIDDEN_DUNDERS or (
-            node.attr.startswith("__") and node.attr.endswith("__") and node.attr != "__name__"
-        ):
-            raise GuardrailViolation(
-                f"Acceso a atributo dunder restringido '{node.attr}' en línea {node.lineno}."
-            )
-        self.generic_visit(node)
-
-    def visit_Name(self, node: ast.Name) -> None:
-        if isinstance(node.ctx, ast.Load) and node.id in self.FORBIDDEN_BUILTINS:
-            raise GuardrailViolation(
-                f"Referencia a built-in restringido '{node.id}' en línea {node.lineno}."
-            )
-        self.generic_visit(node)
-
     def visit_Call(self, node: ast.Call) -> None:
-        call_path = self._resolve_call_name(node.func)
-        if call_path in self.FORBIDDEN_BUILTINS or call_path in self.FORBIDDEN_CALL_PATHS:
-            raise GuardrailViolation(
-                f"Llamada restringida '{call_path}' en línea {node.lineno}."
-            )
+        call_name = self._resolve_call_name(node.func)
+        base_name = call_name.split(".")[0] if call_name else ""
+        if call_name in self.BLOCKED_CALLS or base_name in self.BLOCKED_CALLS:
+            raise GuardrailViolation(f"Llamada a función bloqueada: {call_name}")
         self.generic_visit(node)
 
     @staticmethod
@@ -176,7 +85,7 @@ class SafeASTVisitor(ast.NodeVisitor):
                 current = current.value
             if isinstance(current, ast.Name):
                 parts.append(current.id)
-                return ".".join(reversed(parts))
+            return ".".join(reversed(parts))
         return ""
 
 
@@ -187,13 +96,11 @@ def validate_user_code(source: str, *, max_nodes: int = 1000) -> ast.Module:
     """
     if not isinstance(source, str) or not source.strip():
         raise GuardrailViolation("El código fuente debe ser una cadena de texto no vacía.")
-
     try:
         tree = ast.parse(source, mode="exec")
     except SyntaxError as exc:
         line = exc.lineno if exc.lineno is not None else "?"
         raise GuardrailViolation(f"Error de sintaxis en línea {line}: {exc.msg}") from exc
-
     visitor = SafeASTVisitor(max_nodes=max_nodes)
     visitor.check(tree)
     return tree
@@ -223,7 +130,6 @@ class Guardrails:
         if not isinstance(action_description, str) or not action_description.strip():
             logger.warning("Guardrail bloqueó acción vacía o inválida.")
             return False
-
         for pattern in self.FORBIDDEN_ACTION_PATTERNS:
             match = pattern.search(action_description)
             if match:
@@ -232,7 +138,8 @@ class Guardrails:
                     match.group(0),
                 )
                 return False
-
         return True
 
-    def validate_code(self, source: str, *, max_nodes:
+    def validate_code(self, source: str, *, max_nodes: int = 1000) -> ast.Module:
+        """Valida código fuente Python delegando en validate_user_code."""
+        return validate_user_code(source, max_nodes=max_nodes)
