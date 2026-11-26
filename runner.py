@@ -14,7 +14,9 @@ import re
 import sys
 from typing import Any, Callable, Dict, Optional
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+_ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _ROOT_DIR not in sys.path:
+    sys.path.insert(0, _ROOT_DIR)
 
 from atomum.context.service import ContextService
 from atomum.inference.service import InferenceService
@@ -108,7 +110,6 @@ class AutonomousRunner:
         lines = code.splitlines()
         if not lines:
             return None
-
         for idx in range(len(lines) - 1, -1, -1):
             stripped = lines[idx].strip()
             if not stripped or stripped.startswith("#"):
@@ -130,7 +131,6 @@ class AutonomousRunner:
                 except SyntaxError:
                     break
             break
-
         return None
 
     @classmethod
@@ -138,7 +138,6 @@ class AutonomousRunner:
         lines = code.splitlines()
         if not lines:
             return None
-
         last = lines[-1]
         for quote in ('"""', "'''", '"', "'"):
             if last.count(quote) % 2 == 1:
@@ -155,7 +154,6 @@ class AutonomousRunner:
         stack: list[str] = []
         in_str: Optional[str] = None
         escaped = False
-
         for ch in base:
             if escaped:
                 escaped = False
@@ -221,7 +219,6 @@ class AutonomousRunner:
                     ):
                         end_idx = idx
                         break
-
                 rebuilt = orig_lines[:start_idx] + cand_lines + orig_lines[end_idx:]
                 merged = "\n".join(rebuilt).strip() + "\n"
                 try:
@@ -348,7 +345,10 @@ class AutonomousRunner:
 
     def _authorize_pr_creation(self, target_file: str) -> tuple[bool, str]:
         if self.governance.emergency_stop.is_triggered:
-            reason = self.governance.emergency_stop.status.get("reason") or "EmergencyStop activo"
+            reason = (
+                self.governance.emergency_stop.status.get("reason")
+                or "EmergencyStop activo"
+            )
             return False, f"Creación de PR bloqueada por EmergencyStop: {reason}"
 
         decision = self.governance.authorize_action(
@@ -357,7 +357,6 @@ class AutonomousRunner:
             impact=ActionImpact.PR_CREATION,
             host=target_file,
         )
-
         if decision.requires_human_approval and decision.approval_request_id:
             approved = (
                 bool(self.pr_approval_callback(decision))
@@ -379,7 +378,6 @@ class AutonomousRunner:
 
         if not decision.allowed:
             return False, f"Creación de PR no autorizada ({decision.code}): {decision.reason}"
-
         return True, "Autorizado"
 
     async def propose_improvement(
@@ -403,7 +401,6 @@ class AutonomousRunner:
             return {"status": "error", "message": f"No se pudo leer '{target_file}'."}
 
         tasks_data = self.files.read_json_file("tasks.json") or {}
-
         attempt = await self._request_code_proposal(
             target_file=target_file,
             goal=goal,
@@ -421,7 +418,6 @@ class AutonomousRunner:
                 tasks_data=tasks_data,
                 repair_hint=attempt["error"],
             )
-
         if not attempt["ok"]:
             return {
                 "status": "error",
