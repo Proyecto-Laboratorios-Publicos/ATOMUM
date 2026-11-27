@@ -166,12 +166,16 @@ def _fallback_report(
     proposed_actions = list(dict.fromkeys(proposed_actions))
 
     status: Literal["completed", "completed_with_warnings", "blocked_or_escalated"] = "completed"
-    if errors or reports.get("security_reviewer", {}).get("decision") == "block_or_escalate" or (
-        reports.get("critic", {}).get("verdict") == "escalate_or_reject"
+    if (
+        errors
+        or reports.get("security_reviewer", {}).get("decision") == "block_or_escalate"
+        or reports.get("critic", {}).get("verdict") == "escalate_or_reject"
     ):
         status = "blocked_or_escalated"
-    elif errors or reports.get("critic", {}).get("verdict") == "revise" or (
-        reports.get("security_reviewer", {}).get("decision") == "needs_hardening"
+    elif (
+        errors
+        or reports.get("critic", {}).get("verdict") == "revise"
+        or reports.get("security_reviewer", {}).get("decision") == "needs_hardening"
     ):
         status = "completed_with_warnings"
 
@@ -296,19 +300,19 @@ def report_agent_node(state: AtomumGraphState) -> dict[str, Any]:
             "next_agent": None,
         }
 
-    reports = _collect_agent_reports(state)
-    report = _llm_report(directive, state.target, state.plan, state.errors, reports)
-    source = "groq_llm"
-    if not report:
-        report = _fallback_report(directive, state.target, state.plan, state.errors, reports)
-        source = "deterministic_fallback"
-
     updated_plan: list[PlannerTask] = []
     for task in state.plan:
         if task.assigned_agent == "report_agent" and task.status == "pending":
             updated_plan.append(task.model_copy(update={"status": "completed"}))
         else:
             updated_plan.append(task)
+
+    reports = _collect_agent_reports(state)
+    report = _llm_report(directive, state.target, updated_plan, state.errors, reports)
+    source = "groq_llm"
+    if not report:
+        report = _fallback_report(directive, state.target, updated_plan, state.errors, reports)
+        source = "deterministic_fallback"
 
     temp_state = state.model_copy(update={"plan": updated_plan})
     next_agent = _select_next_agent(temp_state)
