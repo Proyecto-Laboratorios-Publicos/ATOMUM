@@ -2,83 +2,106 @@ from datetime import datetime, timezone
 import json
 import logging
 import os
-from pathlib import Path
-import shutil
-import tempfile
-from typing import Any
+from typing import Any, Dict, List, Optional
+import redis
+import psycopg2
 
 logger = logging.getLogger(__name__)
 
-
 class ContextManager:
-    def __init__(self, memory_file: str | Path = "memory/atomum_memory.json") -> None:
-        base_dir = Path(__file__).resolve().parent.parent
-        target = Path(memory_file)
-        self.memory_file: Path = target if target.is_absolute() else base_dir / target
-        self.cloud_mode: bool = os.getenv("ATOMUM_CLOUD_MODE", "false").lower() == "true"
-        logger.info("[ContextManager] Inicializado. Modo nube (Cloud): %s", self.cloud_mode)
+    def __init__(self) -> None:
+        # Configuración de Redis
+        self.redis_client = redis.Redis(
+            host=os.getenv("REDIS_HOST", "localhost"),
+            port=int(os.getenv("REDIS_PORT", "6379")),
+            db=0,
+            decode_responses=True,
+        )
+        # Configuración de PostgreSQL
+        self.db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/atomum_db")
+        self._init_db()
+
+    def _get_db_connection(self) -> Any:
+        return psycopg2.connect(self.db_url)
+
+    def _init_db(self) -> None:
+        """Inicializa la tabla para el historial de eventos en PostgreSQL."""
+        conn = self._get_db_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS system_events (
+                    id SERIAL PRIMARY KEY,
+                    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    event_type TEXT,
+                    details TEXT
+                );
+            """)
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            cur.close()
+            conn.close()
 
     def log_event(self, event_type: str, details: str) -> bool:
-        """
-        Registra un evento del sistema de forma segura y atómica,
-        estructurando la persistencia local o la sincronización en la nube.
-        """
-        event_entry = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "type": event_type,
-            "details": details,
-        }
-
-        if self.cloud_mode:
-            logger.info("[Cloud DB Sync] Evento registrado en la nube: [%s] %s", event_type, details)
-            return True
-
+        """Registra un evento del sistema en Redis y PostgreSQL."""
         try:
-            self.memory_file.parent.mkdir(parents=True, exist_ok=True)
-            history: list[dict[str, Any]] = []
-
-            if self.memory_file.exists():
-                try:
-                    loaded_data = json.loads(self.memory_file.read_text(encoding="utf-8"))
-                    if isinstance(loaded_data, list):
-                        history = loaded_data
-                except json.JSONDecodeError:
-                    backup_path = self.memory_file.with_suffix(".corrupt.bak")
-                    shutil.copy2(self.memory_file, backup_path)
-                    logger.warning("JSON corrupto respaldado en %s; reiniciando historial.", backup_path)
-                    history = []
-
-            history.append(event_entry)
-
-            # Escritura atómica mediante archivo temporal en el mismo directorio
-            fd, tmp_path = tempfile.mkstemp(dir=self.memory_file.parent, suffix=".tmp")
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as tmp_file:
-                    json.dump(history, tmp_file, indent=4, ensure_ascii=False)
-                os.replace(tmp_path, self.memory_file)
-            except Exception:
-                if os.path.exists(tmp_path):
-                    os.unlink(tmp_path)
-                raise
-
-            logger.info("[Local Memory] Evento guardado exitosamente: [%s]", event_type)
+            timestamp = datetime.now(timezone.utc)
+            
+            # 1. Guardar en Redis como caché
+            redis_key = "system_events:recent"
+            event_entry = {
+                "timestamp": timestamp.isoformat(),
+                "type": event_type,
+                "details": details
+            }
+            self.redis_client.lpush(redis_key, json.dumps(event_entry))
+            self.redis_client.ltrim(redis_key, 0, 99) # Mantener los últimos 100 eventos
+            
+            # 2. Guardar en PostgreSQL
+            conn = self._get_db_connection()
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO system_events (timestamp, event_type, details)
+                VALUES (%s, %s, %s);
+            """, (timestamp, event_type, details))
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            logger.info("[Event Log] Evento guardado exitosamente: [%s]", event_type)
             return True
         except Exception as e:
             logger.error("[Context Error] No se pudo registrar el evento en memoria: %s", e)
             return False
 
-    def get_recent_events(self, limit: int = 20) -> list[dict[str, Any]]:
-        """Devuelve los últimos N eventos almacenados en memoria local."""
-        if self.cloud_mode or not self.memory_file.exists():
-            return []
+    def get_recent_events(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Devuelve los últimos N eventos almacenados en PostgreSQL."""
         try:
-            loaded_data = json.loads(self.memory_file.read_text(encoding="utf-8"))
-            if isinstance(loaded_data, list):
-                return loaded_data[-limit:]
-        except (json.JSONDecodeError, OSError) as e:
+            conn = self._get_db_connection()
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT timestamp, event_type, details
+                FROM system_events
+                ORDER BY id DESC LIMIT %s;
+            """, (limit,))
+            rows = cur.fetchall()
+            
+            events = []
+            for row in rows:
+                events.append({
+                    "timestamp": row[0].isoformat() if row[0] else None,
+                    "type": row[1],
+                    "details": row[2]
+                })
+            cur.close()
+            conn.close()
+            return events[::-1] # Invertir el orden para que sea cronológico
+        except Exception as e:
             logger.error("[Context Error] No se pudo leer el historial de memoria: %s", e)
-        return []
-
+            return []
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
