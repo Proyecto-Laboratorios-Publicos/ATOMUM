@@ -140,4 +140,4 @@ Resiliencia: Reintentos automáticos y manejo elegante de excepciones de red par
 
 ---
 
-**Versión actual:** `ATOMUM v2.0` · **Estado:** Producción / Auditoría Activa · **Licencia:** Apache-2.0
+**Versión actual:** `ATOMUM v3.0` · **Estado:** Producción / Auditoría Activa · **Licencia:** Apache-2.0
