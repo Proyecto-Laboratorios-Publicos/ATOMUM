@@ -18,7 +18,7 @@ class SecurityPolicy(BaseModel):
     title: str  # Título de la política
     description: str  # Detalle de la norma a cumplir
     category: str  # Categoría (ej., Acceso, Red, Cifrado)
-    relevant_standards: List[ComplianceStandard] = (
+    relevant_standards: List[ComplianceStandard] = Field(
         default_factory=list
     )  # Estándares asociados
     is_active: bool = True  # Estado de la política
