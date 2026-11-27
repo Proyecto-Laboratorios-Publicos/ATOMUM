@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Optional
-from autonomous_loop.memory.episodic.models import EpisodicEvent
-from autonomous_loop.memory.episodic.store import EpisodicMemoryStore
+from memory.episodic.models import EpisodicEvent
+from memory.episodic.store import EpisodicMemoryStore
 
 class EpisodicMemoryContextManager:
     """Gestiona el contexto y la interacción de alto nivel con la memoria episódica."""
