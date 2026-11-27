@@ -160,7 +160,11 @@ def render_protected_pr_section(pr_client: PullRequestClient) -> None:
             f"Repo: `{pending['repo']}` | `{pending['head_branch']}` -> `{pending['base_branch']}` | "
             f"Título: `{pending['title']}`"
         )
-        approver = st.text_input("Aprobado por (revisor humano)", value="totem_reviewer")
+        approver = st.text_input(
+            "Aprobado por (revisor humano)",
+            value="totem_reviewer",
+            key="pr_guard_approver",
+        )
         c_app, c_rej = st.columns(2)
         with c_app:
             if st.button("2. Aprobar y crear PR", type="primary"):
@@ -171,7 +175,10 @@ def render_protected_pr_section(pr_client: PullRequestClient) -> None:
                     approved=True,
                 )
                 if res and res.created:
-                    st.success(f"PR creado (#{res.pr_info.get('number') if res.pr_info else 'ok'}).")
+                    pr_num = res.pr_info.get("number") if res.pr_info else "ok"
+                    pr_url = res.pr_info.get("html_url") if res.pr_info else ""
+                    extra = f" — {pr_url}" if pr_url else ""
+                    st.success(f"PR creado (#{pr_num}){extra}.")
                 elif res:
                     st.warning(f"PR no creado ({res.status}): {res.decision.reason}")
         with c_rej:
@@ -192,9 +199,11 @@ def render_protected_pr_section(pr_client: PullRequestClient) -> None:
 
 
 def asdict_like(item: Dict[str, Any]) -> Dict[str, Any]:
+    pr_info = item.get("pr_info") or {}
     return {
         "created": item.get("created"),
         "status": item.get("status"),
         "decision_code": item.get("code"),
-        "pr_number": (item.get("pr_info") or {}).get("number"),
+        "pr_number": pr_info.get("number"),
+        "pr_url": pr_info.get("html_url"),
     }
