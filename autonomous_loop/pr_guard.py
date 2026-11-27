@@ -53,7 +53,6 @@ class ProtectedPullRequestWorkflow:
         if not cleaned:
             return "github.com"
         if "/" in cleaned and not cleaned.startswith("http"):
-            # Si viene en formato "org/repo", el host de gobernanza es github.com
             return "github.com"
         return cleaned
 
