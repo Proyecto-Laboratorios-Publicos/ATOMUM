@@ -77,7 +77,7 @@ class ProtectedPullRequestWorkflow:
         candidate_python_code: Optional[str] = None,
         approver: str = "human_reviewer",
     ) -> PRGuardResult:
-        if self.governance.emergency_stop.is_triggered:
+        if self.governance.emergency_stop.halted:
             reason = self.governance.emergency_stop.status.get("reason") or "Parada activa"
             blocked = GovernanceDecision(
                 allowed=False,
