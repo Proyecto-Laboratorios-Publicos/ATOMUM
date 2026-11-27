@@ -12,10 +12,16 @@ def test_procedural_memory_manager_integration(mock_redis_class, mock_db_connect
     mock_redis = mock_redis_class.return_value
     mock_redis.get.return_value = None
     
-    # Configurar mock de base de datos
+    # Configurar mock de base de datos para simular playbook no existente inicialmente
     mock_conn = mock_db_connect.return_value
     mock_cursor = mock_conn.cursor.return_value
-    mock_cursor.fetchone.return_value = None
+    
+    # Primera llamada a fetchone devuelve None (no está en DB), segunda devuelve el playbook
+    mock_now = datetime.utcnow()
+    mock_cursor.fetchone.side_effect = [
+        None, 
+        ("PB-001", "Host Isolation Playbook", "Standard procedure to isolate a compromised host.", "Contención", [], ["security", "incident-response"], mock_now)
+    ]
     
     # Inicializar controlador de gobernanza base
     policy = ScopePolicy()
