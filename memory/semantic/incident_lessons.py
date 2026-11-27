@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
@@ -16,4 +16,4 @@ class LessonLearned(BaseModel):
         default=1, ge=1, le=5
     )  # Severidad del problema solucionado
     tags: List[str] = Field(default_factory=list)  # Etiquetas
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
