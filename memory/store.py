@@ -34,6 +34,7 @@ class PersistentStore:
         conn = self._get_db_connection()
         cur = conn.cursor()
         try:
+            # Tabla de registros generales de ejecución
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS autonomous_logs (
                     id SERIAL PRIMARY KEY,
@@ -47,9 +48,56 @@ class PersistentStore:
             cur.execute("""
                 CREATE INDEX IF NOT EXISTS idx_autonomous_logs_goal_id ON autonomous_logs (goal_id);
             """)
+            
+            # Tabla para Inteligencia de Amenazas
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS threat_intelligence (
+                    id SERIAL PRIMARY KEY,
+                    threat_id TEXT UNIQUE,
+                    description TEXT,
+                    severity TEXT,
+                    ioc_data JSONB,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+
+            # Tabla para Políticas de Cumplimiento
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS compliance_policies (
+                    id SERIAL PRIMARY KEY,
+                    policy_id TEXT UNIQUE,
+                    standards JSONB,
+                    last_updated TIMESTAMP
+                );
+            """)
+
+            # Tabla para Activos
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS assets (
+                    id SERIAL PRIMARY KEY,
+                    asset_id TEXT UNIQUE,
+                    classification TEXT,
+                    last_scanned TIMESTAMP
+                );
+            """)
+
+            # Tabla para Lecciones Aprendidas
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS incident_lessons (
+                    id SERIAL PRIMARY KEY,
+                    lesson_id TEXT UNIQUE,
+                    category TEXT,
+                    details TEXT,
+                    mitigated BOOLEAN,
+                    created_at TIMESTAMP
+                );
+            """)
+
             conn.commit()
+            logger.info("Tablas de memoria semántica inicializadas correctamente.")
         except Exception as e:
             conn.rollback()
+            logger.error("Error al inicializar la base de datos: %s", e)
             raise e
         finally:
             cur.close()
