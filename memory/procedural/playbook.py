@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
@@ -23,7 +23,7 @@ class Playbook(BaseModel):
     category: str  # Ej., Contención, Erradicación, Recuperación
     steps: List[PlaybookStep] = Field(default_factory=list)
     tags: List[str] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class SuccessfulTechnique(BaseModel):
@@ -34,4 +34,4 @@ class SuccessfulTechnique(BaseModel):
     context: str  # Escenario en el que fue exitoso
     steps_executed: List[str]  # Pasos que llevaron al éxito
     effectiveness_score: float = Field(default=1.0, ge=0.0, le=1.0)
-    learned_at: datetime = Field(default_factory=datetime.utcnow)
+    learned_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
