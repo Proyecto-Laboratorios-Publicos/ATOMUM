@@ -109,7 +109,7 @@ def render_protected_pr_section(pr_client: PullRequestClient) -> None:
     st.subheader("Creación Protegida de Pull Request (Human-in-the-Loop)")
     governance = get_or_init_governance()
 
-    if governance.emergency_stop.is_triggered:
+    if governance.emergency_stop.halted:
         st.error(
             f"EmergencyStop activo: {governance.emergency_stop.status.get('reason', 'Detenido')}"
         )
