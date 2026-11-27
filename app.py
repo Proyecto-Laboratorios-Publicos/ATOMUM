@@ -33,12 +33,18 @@ except Exception as e:
 # Importación robusta del flujo protegido de PRs (Human-in-the-Loop + AST)
 pr_guard_ui_available = False
 render_protected_pr_section = None
+GitHubPRClient = None
 try:
     from autonomous_loop.pr_ui_helper import render_protected_pr_section
 
     pr_guard_ui_available = True
 except Exception:
     pr_guard_ui_available = False
+
+try:
+    from autonomous_loop.github_pr_client import GitHubPRClient
+except Exception:
+    GitHubPRClient = None
 
 
 class _DryRunPullRequestClient:
@@ -323,7 +329,15 @@ with tab_self_improve:
 
     st.markdown("---")
     if pr_guard_ui_available and render_protected_pr_section is not None:
-        render_protected_pr_section(pr_client=_DryRunPullRequestClient())
+        if GitHubPRClient is not None and os.getenv("GITHUB_TOKEN"):
+            pr_client = GitHubPRClient()
+        else:
+            if not os.getenv("GITHUB_TOKEN"):
+                st.warning(
+                    "⚠️ No se detectó `GITHUB_TOKEN`: PR Guard operará en modo simulación (`_DryRunPullRequestClient`)."
+                )
+            pr_client = _DryRunPullRequestClient()
+        render_protected_pr_section(pr_client=pr_client)
     else:
         st.info(
             "💡 Subí `autonomous_loop/pr_guard.py` y `autonomous_loop/pr_ui_helper.py` para activar el control visual de aprobación humana (HITL) sobre PRs."
