@@ -2,8 +2,8 @@ from __future__ import annotations
 from datetime import datetime
 from unittest.mock import MagicMock
 from memory.episodic.context_manager import EpisodicMemoryContextManager
-from autonomous_loop.memory.episodic.store import EpisodicMemoryStore
-from autonomous_loop.memory.episodic.models import EpisodicEvent
+from memory.episodic.store import EpisodicMemoryStore
+from memory.episodic.models import EpisodicEvent
 
 def test_log_action_success():
     """Verifica que se registre una acción exitosamente."""
