@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
 from pydantic import BaseModel, Field
@@ -12,7 +12,7 @@ class EpisodicEvent(BaseModel):
         description="Identificador único universal del evento"
     )
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow, 
+        default_factory=lambda: datetime.now(timezone.utc), 
         description="Fecha y hora en que ocurrió el evento"
     )
     agent_role: str = Field(
