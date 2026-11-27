@@ -3,6 +3,7 @@ from memory.procedural.procedural_memory_manager import ProceduralMemoryManager
 from memory.procedural.store import ProceduralMemoryStore
 from memory.procedural.playbook import Playbook, PlaybookStep
 from unittest.mock import patch
+from datetime import datetime
 
 @patch('memory.procedural.store.psycopg2.connect')
 @patch('memory.procedural.store.redis.Redis')
