@@ -7,6 +7,15 @@ from unittest.mock import patch
 @patch('memory.procedural.store.psycopg2.connect')
 @patch('memory.procedural.store.redis.Redis')
 def test_procedural_memory_manager_integration(mock_redis_class, mock_db_connect):
+    # Configurar mock de Redis para simular cache miss
+    mock_redis = mock_redis_class.return_value
+    mock_redis.get.return_value = None
+    
+    # Configurar mock de base de datos
+    mock_conn = mock_db_connect.return_value
+    mock_cursor = mock_conn.cursor.return_value
+    mock_cursor.fetchone.return_value = None
+    
     # Inicializar controlador de gobernanza base
     policy = ScopePolicy()
     governance = GovernanceController(policy)
