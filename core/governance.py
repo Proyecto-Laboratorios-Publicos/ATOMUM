@@ -55,6 +55,7 @@ class ScopePolicy(BaseModel):
             ActionImpact.CREDENTIAL_TEST.value,
             ActionImpact.STATE_MUTATION.value,
             ActionImpact.WRITE_ACTION.value,
+            ActionImpact.PR_CREATION.value,
         ]
     )
     max_steps: int = Field(default=50, ge=1)
