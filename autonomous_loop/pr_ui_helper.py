@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 from typing import Any, Dict, Optional
 
 import streamlit as st
@@ -29,6 +28,16 @@ def validate_pr_candidate_code(code: str) -> tuple[bool, Optional[str]]:
         return False, str(exc)
 
 
+def _get_halt_reason(governance: GovernanceController) -> str:
+    status_data = governance.emergency_stop.status()
+    return (
+        status_data.get("halt_reason")
+        or status_data.get("reason")
+        or governance.emergency_stop.halt_reason
+        or "EmergencyStop activo"
+    )
+
+
 def stage_pr_proposal(
     governance: GovernanceController,
     repo: str,
@@ -41,7 +50,7 @@ def stage_pr_proposal(
 ) -> tuple[bool, str]:
     """Valida AST y deja preparada la propuesta en session_state a la espera de aprobación humana."""
     if governance.emergency_stop.halted:
-        reason = governance.emergency_stop.status.get("reason") or "EmergencyStop activo"
+        reason = _get_halt_reason(governance)
         return False, f"Bloqueado por EmergencyStop: {reason}"
 
     ast_ok, ast_err = validate_pr_candidate_code(candidate_code)
@@ -57,7 +66,7 @@ def stage_pr_proposal(
         "body": body.strip(),
         "candidate_code": candidate_code,
     }
-    return True, "Propuesta validada con AST. Requiere aprobación humana explicita para crear el PR."
+    return True, "Propuesta validada con AST. Requiere aprobación humana explícita para crear el PR."
 
 
 def execute_staged_pr_with_approval(
@@ -110,9 +119,7 @@ def render_protected_pr_section(pr_client: PullRequestClient) -> None:
     governance = get_or_init_governance()
 
     if governance.emergency_stop.halted:
-        st.error(
-            f"EmergencyStop activo: {governance.emergency_stop.status.get('reason', 'Detenido')}"
-        )
+        st.error(f"EmergencyStop activo: {_get_halt_reason(governance)}")
 
     with st.form("atomum_protected_pr_form"):
         repo = st.text_input("Repositorio / Target", value="Proyecto-Laboratorios-Publicos/ATOMUM")
