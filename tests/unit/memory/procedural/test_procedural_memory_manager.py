@@ -4,8 +4,9 @@ from memory.procedural.store import ProceduralMemoryStore
 from memory.procedural.playbook import Playbook, PlaybookStep
 from unittest.mock import patch
 
+@patch('memory.procedural.store.psycopg2.connect')
 @patch('memory.procedural.store.redis.Redis')
-def test_procedural_memory_manager_integration(mock_redis_class):
+def test_procedural_memory_manager_integration(mock_redis_class, mock_db_connect):
     # Inicializar controlador de gobernanza base
     policy = ScopePolicy()
     governance = GovernanceController(policy)
