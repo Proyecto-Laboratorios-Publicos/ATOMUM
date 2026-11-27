@@ -4,12 +4,15 @@ from memory.semantic.threat_intel import ThreatIntelligence
 from memory.semantic.compliance import SecurityPolicy
 from memory.semantic.assets import Asset
 from memory.semantic.incident_lessons import LessonLearned
+from memory.store import PersistentStore
 
 class SemanticMemoryManager:
     """Administrador central para la gestión y recuperación de la memoria semántica."""
-
+    
     def __init__(self, governance: GovernanceController):
         self.governance = governance
+        self.store = PersistentStore()
+        # Mantenemos diccionarios para caché rápida en memoria si es necesario
         self._threat_intelligence: Dict[str, ThreatIntelligence] = {}
         self._compliance_policies: Dict[str, SecurityPolicy] = {}
         self._assets: Dict[str, Asset] = {}
@@ -18,6 +21,7 @@ class SemanticMemoryManager:
     def add_threat(self, threat: ThreatIntelligence) -> None:
         """Registra una nueva inteligencia de amenazas."""
         self._threat_intelligence[threat.threat_id] = threat
+        # La persistencia a largo plazo se gestionaría aquí con el store
 
     def get_threat(self, threat_id: str) -> Optional[ThreatIntelligence]:
         """Recupera una inteligencia de amenazas."""
