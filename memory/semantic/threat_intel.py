@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
@@ -34,4 +34,4 @@ class ThreatIntelligence(BaseModel):
     indicators: List[IndicatorOfCompromise] = Field(default_factory=list)
     vulnerabilities: List[VulnerabilityReference] = Field(default_factory=list)
     tags: List[str] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
