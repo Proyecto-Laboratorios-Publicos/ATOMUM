@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
 from unittest.mock import MagicMock
-from autonomous_loop.memory.episodic.context_manager import EpisodicMemoryContextManager
+from memory.episodic.context_manager import EpisodicMemoryContextManager
 from autonomous_loop.memory.episodic.store import EpisodicMemoryStore
 from autonomous_loop.memory.episodic.models import EpisodicEvent
 
