@@ -2,8 +2,10 @@ from core.governance import GovernanceController, ScopePolicy
 from memory.procedural.procedural_memory_manager import ProceduralMemoryManager
 from memory.procedural.store import ProceduralMemoryStore
 from memory.procedural.playbook import Playbook, PlaybookStep
+from unittest.mock import patch
 
-def test_procedural_memory_manager_integration():
+@patch('memory.procedural.store.redis.Redis')
+def test_procedural_memory_manager_integration(mock_redis_class):
     # Inicializar controlador de gobernanza base
     policy = ScopePolicy()
     governance = GovernanceController(policy)
