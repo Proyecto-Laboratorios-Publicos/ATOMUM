@@ -9,38 +9,44 @@ Plataforma modular de ingeniería de IA y ciberseguridad ofensiva/defensiva dise
 |          ATOMUM: Centro de Control Autónomo           |
 |              (Streamlit Operations UI)                |
 +-----------+---------------+---------------+-----------+
-            |               |               |
-            v               v               v
-    +-------+-------+ +-----+-------+ +-----+-------+
-    |   Consola     | | Auto-Mejora | | PortScanner |
-    |   Cognitiva   | | & GitHub PR | | & Audit UI  |
-    +---------------+ +-------------+ +-------------+
+|               |               |               |
++-------+-------+ +-----+-------+ +-----+-------+ +-----+-------+
+|   Consola     | | Multi-Agente  | | Auto-Mejora | | PortScanner |
+|   Cognitiva   | | Orquestación  | | & GitHub PR | | & Audit UI  |
++---------------+ +-------------+ +-------------+ +-------------+
 ```
 
 
-## ⚙️ Componentes Clave (/core, /atomum & /security)
+## ⚙️ Componentes Clave (/core, /atomum, /autonomous_loop & /security)
 
-- core/engine.py: Núcleo de procesamiento de directivas. Valida comandos mediante guardarraíses constitucionales y conecta de forma directa con la API de Groq con un límite optimizado de hasta 8192 tokens de salida.
+- **core/governance.py & pr_guard.py:** Capa de gobernanza, control de alcance, `EmergencyStop`, aprobación humana obligatoria (*Human-in-the-Loop*) y registro de auditoría inmutable. Valida el impacto de las acciones y sella evidencia técnica.
 
-- core/http_client.py: Cliente HTTP asíncrono robusto construido sobre aiohttp y aiohttp-retry. Cuenta con un único TCPConnector para reutilización de sockets (keep-alive), reintentos con back-off exponencial ante fallos de red y control estricto de concurrencia mediante semáforos. 
+- **autonomous_loop/github_pr_client.py:** Cliente especializado para interactuar con la API de GitHub mediante tokens cifrados, automatizando la creación segura de Pull Requests tras validaciones robustas.
 
-- atomum/inference/ & runner.py: Capa de inferencia desacoplada (InferenceService / GroqInferenceClient) y orquestador autónomo (AutonomousRunner) con telemetría de consumo (usage y finish_reason), validación sintáctica por AST y creación automatizada de ramas y Pull Requests en GitHub.
+- **atomum/inference/ & runner.py:** Orquestador multi-agente que conecta motores cognitivos y ejecuta tareas desacopladas, validando sintácticamente el código candidato mediante AST.
 
-- security/port_scanner/: Escáner asíncrono de puertos de alto rendimiento con resolución DNS previa, banner grabbing en doble pasada, análisis de riesgos y exportación multiformato (CSV, JSON, Word, PDF y HTML Interactivo con KPIs y acordeones).
+- **security/port_scanner/:** Escáner asíncrono de puertos de alto rendimiento con resolución DNS, banner grabbing y auditorías detalladas.
 
-## 🧬 Gobernanza Autónoma, Guardrails y Cuotas de Tokens
+## 🧬 Gobernanza Autónoma y Aprobación Humana (Human-in-the-Loop)
 
-El ciclo de Auto-Mejora & GitHub PRs opera bajo supervisión humana (Human-in-the-Loop) y atraviesa cuatro barreras de seguridad obligatorias antes de publicar cualquier cambio:
+Toda propuesta crítica o de alto impacto originada por los agentes autónomos atraviesa un workflow protegido e inmutable antes de impactar en el repositorio remoto:
 
-1. Validación Sintáctica Estricta (AST): Ninguna propuesta generada por el modelo se aplica sin superar ast.parse() sin errores ni truncamientos.
+1. **Validación Sintáctica (AST):** El sistema parsea el código candidato en búsqueda de errores o truncamientos mediante validación obligatoria.
 
-2. Compuerta de Pruebas Automatizadas (pytest): Los cambios candidatos deben mantener en verde la suite de pruebas unitarias antes de habilitar la creación de rama o PR.
+2. **Evaluación de Gobernanza:** El `GovernanceController` clasifica el impacto de la acción y evalúa si la directiva requiere aprobación explícita.
 
-3. Ejecución Acotada de Comandos: Las operaciones del sistema están restringidas a listas blancas de comandos seguros y timeouts explícitos.
+3. **Compuerta de Revisión Humana:** En caso de requerir aprobación, se pausa la ejecución local y se requiere el visto bueno del supervisor humano a través de la interfaz de Streamlit antes de avanzar a la creación del PR.
 
-4. Gobernanza Humana en GitHub: El agente nunca realiza merge directo a main; toda modificación queda sujeta a revisión y aprobación manual mediante Pull Request.
+4. **Despliegue Asíncrono y Auditoría:** Una vez aprobado, el `GitHubPRClient` publica el cambio y el sistema registra el outcome de manera imborrable en el log de eventos.
 
-Nota Operativa (TPM / Tier Gratuito): El módulo de auto-mejora se encuentra funcional y validado. En entornos que operan sobre niveles gratuitos de API con límites estrictos de Tokens por Minuto (TPM) (~8.000 TPM), se recomienda ejecutar objetivos acotados a funciones o métodos puntuales en lugar de reescrituras completas de archivos extensos, evitando truncamientos (finish_reason="length") o saturación de ventana. La capa de inferencia está lista para escalar sin cambios estructurales hacia tiers de mayor throughput o modelos dedicados.   
+## 🧠 Orquestación Multi-Agente y Flujo Modular
+
+El núcleo de ATOMUM desacopla el razonamiento de la ejecución mediante una arquitectura de agentes especializados:
+
+- **Cognitive Planner:** Recibe la instrucción técnica del usuario y descompone el objetivo en un plan estructurado, validando la viabilidad y alcance de las acciones solicitadas.
+  
+- **Autonomous Runner:** Toma el plan generado y coordina la ejecución asíncrona a través de los servicios de inferencia y los módulos operativos, asegurando que cada paso cumpla con las guardrails de gobernanza antes de cualquier interacción con el repositorio o la red.
+  
 
 ## ⚡ Stack Tecnológico
 
@@ -64,6 +70,19 @@ Nota Operativa (TPM / Tier Gratuito): El módulo de auto-mejora se encuentra fun
 - [ ] Escaneo de Aplicaciones Web (DAST): Fuzzing asíncrono de directorios, detección de tecnologías web y auditoría de cabeceras HTTP/HTTPS (HSTS, CSP, X-Frame-Options).
 
 - [ ] Mapeo Topológico de Red (CIDR): Barrido de hosts activos en rangos completos de subred (ej. 192.168.1.0/24) y graficado de nodos vivos previo al escaneo de puertos.  
+
+
+```markdown
+## 🛠️ Requisitos de Entorno y Ejecución
+
+Para ejecutar el sistema localmente o en un entorno cloud (como Streamlit Cloud), asegúrate de configurar las siguientes variables de entorno:
+
+- **GITHUB_TOKEN:** Token de acceso personal con permisos para crear Pull Requests.
+
+- **GROQ_API_KEY:** Clave de API de Groq para el motor de inferencia.
+
+Asegúrate también de que los archivos necesarios para los módulos visuales (como el escáner de puertos) estén correctamente ubicados en sus respectivas carpetas.
+```
 
 ## 📂 Estructura del Proyecto
 ```text
