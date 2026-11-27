@@ -37,6 +37,7 @@ class ActionImpact(str, Enum):
     CREDENTIAL_TEST = "credential_test"
     STATE_MUTATION = "state_mutation"
     WRITE_ACTION = "write_action"
+    PR_CREATION = "pr_creation"
 
 
 class ScopePolicy(BaseModel):
