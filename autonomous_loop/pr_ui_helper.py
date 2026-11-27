@@ -104,7 +104,7 @@ def execute_staged_pr_with_approval(
         {
             "created": result.created,
             "status": result.status,
-            "code": result.decision.code,
+            "code": result.error_code,
             "reason": result.decision.reason,
             "pr_info": result.pr_info,
         }
