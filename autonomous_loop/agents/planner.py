@@ -19,6 +19,7 @@ class PlannerTask(BaseModel):
         "security_reviewer",
         "coder",
         "critic",
+        "report_agent",
     ] = Field(..., description="Agente especialista al que se delega la tarea")
     rationale: str = Field(..., description="Motivo por el cual se requiere este paso")
     status: Literal["pending", "in_progress", "completed", "skipped"] = Field(
@@ -93,6 +94,15 @@ def _fallback_plan(directive: str, target: str | None) -> list[PlannerTask]:
             rationale="Verificar riesgos, regresiones y coherencia antes de cerrar el ciclo.",
         )
     )
+
+    tasks.append(
+        PlannerTask(
+            id=f"T{len(tasks) + 1}",
+            title="Generación de informe final consolidado",
+            assigned_agent="report_agent",
+            rationale="Consolidar hallazgos, evaluación crítica y recomendaciones finales.",
+        )
+    )
     return tasks
 
 
@@ -110,8 +120,8 @@ def _llm_plan(directive: str, target: str | None) -> list[PlannerTask] | None:
         system_prompt = (
             "Eres el Planner de ATOMUM. Devuelve ÚNICAMENTE un JSON válido con una lista "
             "'tasks'. Cada elemento debe tener: 'id' (string), 'title' (string), "
-            "'assigned_agent' (uno de: threat_intel, vuln_analyst, security_reviewer, coder, critic) "
-            "y 'rationale' (string)."
+            "'assigned_agent' (uno de: threat_intel, vuln_analyst, security_reviewer, coder, critic, report_agent) "
+            "y 'rationale' (string). Incluye siempre una tarea final asignada a 'report_agent'."
         )
         user_payload = json.dumps(
             {"directive": directive, "target": target}, ensure_ascii=False
@@ -132,7 +142,17 @@ def _llm_plan(directive: str, target: str | None) -> list[PlannerTask] | None:
         if not isinstance(raw_tasks, list) or not raw_tasks:
             return None
 
-        return [PlannerTask.model_validate(item) for item in raw_tasks]
+        tasks = [PlannerTask.model_validate(item) for item in raw_tasks]
+        if not any(t.assigned_agent == "report_agent" for t in tasks):
+            tasks.append(
+                PlannerTask(
+                    id=f"T{len(tasks) + 1}",
+                    title="Generación de informe final consolidado",
+                    assigned_agent="report_agent",
+                    rationale="Consolidar hallazgos, evaluación crítica y recomendaciones finales.",
+                )
+            )
+        return tasks
     except Exception:
         return None
 
@@ -187,6 +207,7 @@ def build_planner_graph():
         "security_reviewer",
         "coder",
         "critic",
+        "report_agent",
     ):
         graph.add_node(
             agent_name,
@@ -209,6 +230,7 @@ def build_planner_graph():
             "security_reviewer": "security_reviewer",
             "coder": "coder",
             "critic": "critic",
+            "report_agent": "report_agent",
             END: END,
         },
     )
