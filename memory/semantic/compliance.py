@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
@@ -22,4 +22,5 @@ class SecurityPolicy(BaseModel):
         default_factory=list
     )  # Estándares asociados
     is_active: bool = True  # Estado de la política
-    last_updated: datetime = Field(default_factory=datetime.utcnow)
+    last_updated: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    
