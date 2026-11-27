@@ -17,7 +17,7 @@ from autonomous_loop.agents.report_agent import report_agent_node
 from autonomous_loop.agents.security_reviewer import security_reviewer_node
 from autonomous_loop.agents.task_descomposer import task_decomposer_node
 from autonomous_loop.agents.threat_Intel import threat_intel_node
-from autonomous_loop.agents.vulnerability_analyst import vulnerability_analyst_node
+from autonomous_loop.agents.vulnerability_analyst import vuln_analyst_node
 
 DEFAULT_MAX_ITERATIONS = 12
 
@@ -47,7 +47,7 @@ def build_atomum_graph():
     graph.add_node("planner", planner_node)
     graph.add_node("task_decomposer", task_decomposer_node)
     graph.add_node("threat_intel", threat_intel_node)
-    graph.add_node("vuln_analyst", vulnerability_analyst_node)
+    graph.add_node("vuln_analyst", vuln_analyst_node)
     graph.add_node("security_reviewer", security_reviewer_node)
     graph.add_node("coder", coding_agent_node)
     graph.add_node("critic", critic_node)
