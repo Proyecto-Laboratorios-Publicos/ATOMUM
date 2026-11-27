@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
@@ -21,4 +21,4 @@ class Asset(BaseModel):
         default_factory=list
     )  # CVEs asociados
     tags: List[str] = Field(default_factory=list)  # Etiquetas adicionales
-    last_scanned: datetime = Field(default_factory=datetime.utcnow)
+    last_scanned: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
