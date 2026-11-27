@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 from redis import Redis
 from datetime import datetime
-from autonomous_loop.memory.episodic.models import EpisodicEvent
+from memory.episodic.models import EpisodicEvent
 
 class EpisodicMemoryStore:
     """Implementación de almacenamiento para la memoria episódica usando Redis."""
