@@ -8,6 +8,7 @@ aprobación humana y registro de auditoría inmutable para ATOMUM.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from enum import Enum
 import hashlib
 import ipaddress
 import json
@@ -22,6 +23,22 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class ActionImpact(str, Enum):
+    """Clasificación del nivel de impacto o riesgo de una acción del agente."""
+
+    READ_ONLY = "read_only"
+    PASSIVE_RECON = "passive_recon"
+    ACTIVE_PROBE = "active_probe"
+    LOW_IMPACT = "low_impact"
+    MEDIUM_IMPACT = "medium_impact"
+    HIGH_IMPACT = "high_impact"
+    CRITICAL = "critical"
+    EXPLOIT_VERIFICATION = "exploit_verification"
+    CREDENTIAL_TEST = "credential_test"
+    STATE_MUTATION = "state_mutation"
+    WRITE_ACTION = "write_action"
+
+
 class ScopePolicy(BaseModel):
     """Política declarativa de alcance autorizado y límites operativos."""
 
@@ -31,10 +48,12 @@ class ScopePolicy(BaseModel):
     denied_hosts: list[str] = Field(default_factory=list)
     require_human_approval_for: list[str] = Field(
         default_factory=lambda: [
-            "exploit_verification",
-            "credential_test",
-            "state_mutation",
-            "write_action",
+            ActionImpact.HIGH_IMPACT.value,
+            ActionImpact.CRITICAL.value,
+            ActionImpact.EXPLOIT_VERIFICATION.value,
+            ActionImpact.CREDENTIAL_TEST.value,
+            ActionImpact.STATE_MUTATION.value,
+            ActionImpact.WRITE_ACTION.value,
         ]
     )
     max_steps: int = Field(default=50, ge=1)
@@ -287,29 +306,41 @@ class HumanApprovalGate:
         self.required_actions: set[str] = set(
             required_actions
             or [
-                "exploit_verification",
-                "credential_test",
-                "state_mutation",
-                "write_action",
+                ActionImpact.HIGH_IMPACT.value,
+                ActionImpact.CRITICAL.value,
+                ActionImpact.EXPLOIT_VERIFICATION.value,
+                ActionImpact.CREDENTIAL_TEST.value,
+                ActionImpact.STATE_MUTATION.value,
+                ActionImpact.WRITE_ACTION.value,
             ]
         )
         self._requests: dict[str, dict[str, Any]] = {}
 
-    def requires_approval(self, action_type: str) -> bool:
-        return action_type in self.required_actions
+    def requires_approval(self, action_type: str | ActionImpact) -> bool:
+        normalized = (
+            action_type.value
+            if isinstance(action_type, ActionImpact)
+            else str(action_type)
+        )
+        return normalized in self.required_actions
 
     def create_request(
         self,
-        action_type: str,
+        action_type: str | ActionImpact,
         target: str,
         rationale: str,
         metadata: dict[str, Any] | None = None,
     ) -> str:
+        normalized = (
+            action_type.value
+            if isinstance(action_type, ActionImpact)
+            else str(action_type)
+        )
         req_id = str(uuid.uuid4())
         with self._lock:
             self._requests[req_id] = {
                 "request_id": req_id,
-                "action_type": action_type,
+                "action_type": normalized,
                 "target": target,
                 "rationale": rationale,
                 "metadata": dict(metadata or {}),
@@ -392,20 +423,30 @@ class GovernanceController:
     def authorize_action(
         self,
         actor: str,
-        action_type: str,
+        action_type: str | ActionImpact,
         target: str,
         port: int | None = None,
         resolved_ips: list[str] | None = None,
         approval_request_id: str | None = None,
         rationale: str = "",
+        impact: ActionImpact | str | None = None,
     ) -> GovernanceDecision:
+        normalized_action = (
+            action_type.value
+            if isinstance(action_type, ActionImpact)
+            else str(action_type)
+        )
+        normalized_impact = (
+            impact.value if isinstance(impact, ActionImpact) else str(impact) if impact else None
+        )
+
         step_ok, halt_reason = self.emergency_stop.record_step()
         if not step_ok:
             self._record(
                 event_type="emergency_stop",
                 actor=actor,
                 target=target,
-                action=action_type,
+                action=normalized_action,
                 outcome="halted",
                 details={"reason": halt_reason},
             )
@@ -425,27 +466,39 @@ class GovernanceController:
                 event_type="scope_check",
                 actor=actor,
                 target=target,
-                action=action_type,
+                action=normalized_action,
                 outcome="blocked",
                 details={"reason": scope_reason, "port": port},
             )
             return GovernanceDecision(allowed=False, reason=scope_reason)
 
-        if self.approval_gate.requires_approval(action_type):
+        needs_approval = self.approval_gate.requires_approval(normalized_action) or (
+            normalized_impact is not None
+            and self.approval_gate.requires_approval(normalized_impact)
+        )
+
+        if needs_approval:
             if not self.approval_gate.is_approved(approval_request_id):
                 req_id = approval_request_id or self.approval_gate.create_request(
-                    action_type=action_type,
+                    action_type=normalized_impact or normalized_action,
                     target=target,
-                    rationale=rationale or f"Acción '{action_type}' en '{target}'",
-                    metadata={"port": port, "actor": actor},
+                    rationale=rationale or f"Acción '{normalized_action}' en '{target}'",
+                    metadata={
+                        "port": port,
+                        "actor": actor,
+                        "impact": normalized_impact,
+                    },
                 )
                 self._record(
                     event_type="human_approval",
                     actor=actor,
                     target=target,
-                    action=action_type,
+                    action=normalized_action,
                     outcome="pending_approval",
-                    details={"approval_request_id": req_id},
+                    details={
+                        "approval_request_id": req_id,
+                        "impact": normalized_impact,
+                    },
                 )
                 return GovernanceDecision(
                     allowed=False,
@@ -458,9 +511,13 @@ class GovernanceController:
             event_type="action_authorization",
             actor=actor,
             target=target,
-            action=action_type,
+            action=normalized_action,
             outcome="allowed",
-            details={"port": port, "approval_request_id": approval_request_id},
+            details={
+                "port": port,
+                "approval_request_id": approval_request_id,
+                "impact": normalized_impact,
+            },
         )
         return GovernanceDecision(
             allowed=True,
@@ -471,12 +528,17 @@ class GovernanceController:
     def record_execution_result(
         self,
         actor: str,
-        action_type: str,
+        action_type: str | ActionImpact,
         target: str,
         success: bool,
         error_detail: str | None = None,
     ) -> tuple[bool, str | None]:
         """Registra el resultado de una acción ejecutada y evalúa parada por errores."""
+        normalized_action = (
+            action_type.value
+            if isinstance(action_type, ActionImpact)
+            else str(action_type)
+        )
         ok, halt_reason = self.emergency_stop.record_error(is_error=not success)
         details: dict[str, Any] = {"success": success}
         if error_detail:
@@ -488,7 +550,7 @@ class GovernanceController:
             event_type="execution_outcome",
             actor=actor,
             target=target,
-            action=action_type,
+            action=normalized_action,
             outcome="halted" if not ok else "recorded",
             details=details,
         )
