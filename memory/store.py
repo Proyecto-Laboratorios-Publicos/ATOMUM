@@ -1,101 +1,113 @@
-"""
-store.py
---------
-Gestor de persistencia transaccional para ATOMUM.
-Almacena el estado de los objetivos, parches propuestos y métricas de ejecución.
-"""
-
-from contextlib import closing
+import os
 import json
 import logging
-import pathlib
-import sqlite3
-from typing import Any
+from typing import Any, Dict, List, Optional
+import redis
+import psycopg2
+from psycopg2.extras import Json
 
 logger = logging.getLogger(__name__)
 
-
 class PersistentStore:
-    def __init__(self, db_path: str | pathlib.Path = "memory/atomum_memory.db") -> None:
-        self.db_path = pathlib.Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+    """
+    Gestor de persistencia transaccional para ATOMUM.
+    Almacena el estado de los objetivos, parches propuestos y métricas de ejecución.
+    Utiliza Redis para caché y PostgreSQL para almacenamiento a largo plazo.
+    """
+    def __init__(self) -> None:
+        # Configuración de Redis
+        self.redis_client = redis.Redis(
+            host=os.getenv("REDIS_HOST", "localhost"),
+            port=int(os.getenv("REDIS_PORT", "6379")),
+            db=0,
+            decode_responses=True,
+        )
+        # Configuración de PostgreSQL
+        self.db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/atomum_db")
         self._init_db()
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=30.0)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL;")
-        conn.execute("PRAGMA synchronous=NORMAL;")
-        return conn
+    def _get_db_connection(self) -> Any:
+        return psycopg2.connect(self.db_url)
 
     def _init_db(self) -> None:
-        """Inicializa las tablas base para el registro de memoria y automejora."""
-        with closing(self._connect()) as conn:
-            with conn:
-                conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS autonomous_logs (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        goal_id TEXT,
-                        proposal_id TEXT,
-                        status TEXT,
-                        metrics TEXT,
-                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-                    )
-                    """
-                )
-                conn.execute(
-                    """
-                    CREATE INDEX IF NOT EXISTS idx_autonomous_logs_goal_id
-                    ON autonomous_logs (goal_id)
-                    """
-                )
+        """Inicializa las tablas base en PostgreSQL para el registro de memoria y automejora."""
+        conn = self._get_db_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS autonomous_logs (
+                    id SERIAL PRIMARY KEY,
+                    goal_id TEXT,
+                    proposal_id TEXT,
+                    status TEXT,
+                    metrics JSONB,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_autonomous_logs_goal_id ON autonomous_logs (goal_id);
+            """)
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            cur.close()
+            conn.close()
 
-    def record_execution(
-        self,
-        goal_id: str,
-        proposal_id: str,
-        status: str,
-        metrics: dict[str, Any],
-    ) -> None:
-        """Registra el resultado de una iteración del bucle autónomo."""
-        serialized_metrics = json.dumps(metrics, ensure_ascii=False)
-        with closing(self._connect()) as conn:
-            with conn:
-                conn.execute(
-                    """
-                    INSERT INTO autonomous_logs (goal_id, proposal_id, status, metrics)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (goal_id, proposal_id, status, serialized_metrics),
-                )
+    def record_execution(self, goal_id: str, proposal_id: str, status: str, metrics: dict[str, Any]) -> None:
+        """Registra el resultado de una iteración del bucle autónomo en Redis y PostgreSQL."""
+        # 1. Guardar en Redis como caché
+        redis_key = f"execution:last:{goal_id}"
+        self.redis_client.set(redis_key, json.dumps({
+            "goal_id": goal_id,
+            "proposal_id": proposal_id,
+            "status": status,
+            "metrics": metrics
+        }))
+        
+        # 2. Guardar en PostgreSQL
+        conn = self._get_db_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                INSERT INTO autonomous_logs (goal_id, proposal_id, status, metrics)
+                VALUES (%s, %s, %s, %s);
+            """, (goal_id, proposal_id, status, Json(metrics)))
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            cur.close()
+            conn.close()
 
-    def get_recent_history(self, limit: int = 10) -> list[dict[str, Any]]:
-        """Recupera el historial reciente de ejecuciones del bucle."""
+    def get_recent_history(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Recupera el historial reciente de ejecuciones del bucle desde PostgreSQL."""
         safe_limit = max(0, int(limit))
         if safe_limit == 0:
             return []
-
-        with closing(self._connect()) as conn:
-            cursor = conn.execute(
-                """
+            
+        conn = self._get_db_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute("""
                 SELECT goal_id, proposal_id, status, metrics, timestamp
                 FROM autonomous_logs
-                ORDER BY id DESC
-                LIMIT ?
-                """,
-                (safe_limit,),
-            )
-            rows = cursor.fetchall()
-
-        results: list[dict[str, Any]] = []
-        for row in rows:
-            item = dict(row)
-            raw_metrics = item.get("metrics")
-            if isinstance(raw_metrics, str):
-                try:
-                    item["metrics"] = json.loads(raw_metrics)
-                except json.JSONDecodeError:
-                    logger.warning("Métricas no JSON en registro de goal_id=%s", item.get("goal_id"))
-            results.append(item)
-        return results
+                ORDER BY id DESC LIMIT %s;
+            """, (safe_limit,))
+            rows = cur.fetchall()
+            
+            results = []
+            for row in rows:
+                results.append({
+                    "goal_id": row[0],
+                    "proposal_id": row[1],
+                    "status": row[2],
+                    "metrics": row[3], # Ya es un dict gracias a Json de psycopg2
+                    "timestamp": row[4].isoformat() if row[4] else None
+                })
+            return results
+        finally:
+            cur.close()
+            conn.close()
