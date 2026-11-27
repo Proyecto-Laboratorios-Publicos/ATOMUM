@@ -67,11 +67,11 @@ El núcleo de ATOMUM desacopla el razonamiento de la ejecución mediante una arq
 
 El sistema implementa un modelo de memoria híbrido y desacoplado para garantizar la trazabilidad, el contexto a largo plazo y la autoevaluación:
 
-- ** memory/store.py (PersistentStore): ** Gestor central de transacciones que combina ** Redis ** (para caché rápida de estado) y ** PostgreSQL ** (para almacenamiento inmutable a largo plazo de registros de ejecución e históricos).
+- **memory/store.py (PersistentStore):** Gestor central de transacciones que combina **Redis** (para caché rápida de estado) y **PostgreSQL** (para almacenamiento inmutable a largo plazo de registros de ejecución e históricos).
 
-- ** memory/context_manager.py (ContextManager): ** Administrador de contexto del sistema, conectado directamente a la infraestructura de datos para registrar y recuperar eventos críticos, garantizando que el estado del agente sea persistente y robusto tras reinicios.
+- **memory/context_manager.py (ContextManager):** Administrador de contexto del sistema, conectado directamente a la infraestructura de datos para registrar y recuperar eventos críticos, garantizando que el estado del agente sea persistente y robusto tras reinicios.
 
-- ** memory/episodic/ & memory/semantic/: ** Estructuras dedicadas a almacenar eventos específicos y conocimientos estructurados del dominio (amenazas, políticas, activos), todos alineados con timezones en formato UTC estandarizado.
+- **memory/episodic/ & memory/semantic/:** Estructuras dedicadas a almacenar eventos específicos y conocimientos estructurados del dominio (amenazas, políticas, activos), todos alineados con timezones en formato UTC estandarizado.
 
 
 ## 🗺️ Roadmap & Próximas Actualizaciones
