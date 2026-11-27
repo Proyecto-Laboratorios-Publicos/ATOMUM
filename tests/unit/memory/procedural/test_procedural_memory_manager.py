@@ -25,11 +25,11 @@ def test_procedural_memory_manager_integration(mock_redis_class, mock_db_connect
             "Host Isolation Playbook", 
             "Standard procedure to isolate a compromised host.", 
             "Contención", 
-            "[]", 
-            '["security", "incident-response"]', 
+            [], 
+            ["security", "incident-response"], 
             mock_now
         ) 
-    ] 
+    ]
     
     # Inicializar controlador de gobernanza base 
     policy = ScopePolicy() 
