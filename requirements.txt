@@ -12,3 +12,4 @@ markdown2==2.4.8
 beautifulsoup4==4.12.2
 fpdf2>=2.7.0
 redis>=5.0.0
+psycopg2-binary>=2.9.0
