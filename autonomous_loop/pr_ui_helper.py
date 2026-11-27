@@ -40,7 +40,7 @@ def stage_pr_proposal(
     actor: str = "atomum_ui",
 ) -> tuple[bool, str]:
     """Valida AST y deja preparada la propuesta en session_state a la espera de aprobación humana."""
-    if governance.emergency_stop.is_triggered:
+    if governance.emergency_stop.halted:
         reason = governance.emergency_stop.status.get("reason") or "EmergencyStop activo"
         return False, f"Bloqueado por EmergencyStop: {reason}"
 
