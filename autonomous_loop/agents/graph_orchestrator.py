@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from autonomous_loop.agents.coding_agent import coding_agent_node
@@ -20,6 +21,7 @@ from autonomous_loop.agents.threat_Intel import threat_intel_node
 from autonomous_loop.agents.vulnerability_analyst import vuln_analyst_node
 
 DEFAULT_MAX_ITERATIONS = 12
+DEFAULT_THREAD_ID = "atomum-default-thread"
 
 AGENT_ROUTES: dict[str, str] = {
     "planner": "planner",
@@ -40,8 +42,17 @@ def _guarded_route(state: AtomumGraphState) -> str:
     return route_after_planner(state)
 
 
-def build_atomum_graph():
-    """Ensambla y compila el grafo multiagente principal de ATOMUM."""
+def _normalize_config(config: dict[str, Any] | None) -> dict[str, Any]:
+    """Garantiza que `configurable.thread_id` exista para el checkpointer."""
+    normalized: dict[str, Any] = dict(config) if config else {}
+    configurable = dict(normalized.get("configurable") or {})
+    configurable.setdefault("thread_id", DEFAULT_THREAD_ID)
+    normalized["configurable"] = configurable
+    return normalized
+
+
+def build_atomum_graph(checkpointer: Any | None = None):
+    """Ensambla y compila el grafo multiagente principal de ATOMUM con memoria persistente."""
     graph = StateGraph(AtomumGraphState)
 
     graph.add_node("planner", planner_node)
@@ -59,7 +70,8 @@ def build_atomum_graph():
     for node_name in AGENT_ROUTES:
         graph.add_conditional_edges(node_name, _guarded_route, branch_map)
 
-    return graph.compile()
+    effective_checkpointer = checkpointer if checkpointer is not None else MemorySaver()
+    return graph.compile(checkpointer=effective_checkpointer)
 
 
 def run_atomum_cycle(
@@ -67,22 +79,25 @@ def run_atomum_cycle(
     target: str | None = None,
     plan: list[PlannerTask] | None = None,
     config: dict[str, Any] | None = None,
+    checkpointer: Any | None = None,
 ) -> dict[str, Any]:
-    """Ejecuta un ciclo completo del grafo de extremo a extremo."""
-    app = build_atomum_graph()
+    """Ejecuta un ciclo completo del grafo de extremo a extremo con checkpointer."""
+    app = build_atomum_graph(checkpointer=checkpointer)
+    effective_config = _normalize_config(config)
     initial_state = AtomumGraphState(
         directive=directive,
         target=target,
         plan=plan or [],
         next_agent="planner",
     )
-    return app.invoke(initial_state, config=config or {})
+    return app.invoke(initial_state, config=effective_config)
 
 
 if __name__ == "__main__":
     result = run_atomum_cycle(
         directive="Auditar exposición, proponer endurecimiento y generar informe final",
         target="192.168.1.50",
+        config={"configurable": {"thread_id": "e2e-192-168-1-50"}},
     )
     print(
         json.dumps(
