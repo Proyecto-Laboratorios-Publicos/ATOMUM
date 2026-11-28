@@ -225,7 +225,7 @@ def _llm_report(
         from groq import Groq  # type: ignore
 
         client = Groq(api_key=api_key)
-        model = os.getenv("GROQ_REPORT_AGENT_MODEL", "llama-3.3-70b-versatile")
+        model = os.getenv("GROQ_REPORT_AGENT_MODEL", "openai/gpt-oss-120b)
         system_prompt = (
             "Eres el Report Agent de ATOMUM. Consolidas directiva, target, plan, errores "
             "y reportes de los demás agentes en un informe final claro y accionable. "
