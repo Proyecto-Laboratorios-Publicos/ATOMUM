@@ -179,7 +179,7 @@ def _llm_security_review(
         from groq import Groq  # type: ignore
 
         client = Groq(api_key=api_key)
-        model = os.getenv("GROQ_SECURITY_REVIEWER_MODEL", "llama-3.3-70b-versatile")
+        model = os.getenv("GROQ_SECURITY_REVIEWER_MODEL", "openai/gpt-oss-120b")
         system_prompt = (
             "Eres el agente Security Reviewer de ATOMUM. Auditas directiva, target, tareas "
             "y hallazgos previos de Threat Intel y Vulnerability Analyst. "
