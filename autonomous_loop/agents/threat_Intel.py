@@ -149,7 +149,7 @@ def _llm_threat_intel(
         from groq import Groq  # type: ignore
 
         client = Groq(api_key=api_key)
-        model = os.getenv("GROQ_THREAT_INTEL_MODEL", "llama-3.3-70b-versatile")
+        model = os.getenv("GROQ_THREAT_INTEL_MODEL", "openai/gpt-oss-120b")
         system_prompt = (
             "Eres el agente de Threat Intel de ATOMUM. Analiza directiva, target y tareas planificadas. "
             "Devuelve ÚNICAMENTE un JSON válido con las claves: "
