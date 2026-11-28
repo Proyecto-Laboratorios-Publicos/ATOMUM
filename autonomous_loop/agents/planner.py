@@ -116,7 +116,7 @@ def _llm_plan(directive: str, target: str | None) -> list[PlannerTask] | None:
         from groq import Groq  # type: ignore
 
         client = Groq(api_key=api_key)
-        model = os.getenv("GROQ_PLANNER_MODEL", "llama-3.3-70b-versatile")
+        model = os.getenv("GROQ_PLANNER_MODEL", "openai/gpt-oss-120b")
         system_prompt = (
             "Eres el Planner de ATOMUM. Devuelve ÚNICAMENTE un JSON válido con una lista "
             "'tasks'. Cada elemento debe tener: 'id' (string), 'title' (string), "
