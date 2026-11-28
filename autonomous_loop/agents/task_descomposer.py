@@ -170,7 +170,7 @@ def _llm_decompose(
         from groq import Groq  # type: ignore
 
         client = Groq(api_key=api_key)
-        model = os.getenv("GROQ_DECOMPOSER_MODEL", "llama-3.3-70b-versatile")
+        model = os.getenv("GROQ_DECOMPOSER_MODEL", "openai/gpt-oss-120b")
         system_prompt = (
             "Eres el Task Decomposer de ATOMUM. Recibes una lista de tareas y un target opcional. "
             "Devuelve ÚNICAMENTE un JSON válido con la clave 'actions' (lista de objetos). "
