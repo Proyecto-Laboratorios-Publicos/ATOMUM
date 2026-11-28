@@ -188,7 +188,7 @@ def _llm_critique(
         from groq import Groq  # type: ignore
 
         client = Groq(api_key=api_key)
-        model = os.getenv("GROQ_CRITIC_MODEL", "llama-3.3-70b-versatile")
+        model = os.getenv("GROQ_CRITIC_MODEL", "openai/gpt-oss-120b")
         system_prompt = (
             "Eres el agente Critic de ATOMUM. Evalúas directiva, target, plan, errores "
             "y hallazgos de los demás agentes para dar una crítica honesta y accionable. "
