@@ -156,7 +156,7 @@ def _llm_coding_plan(
         from groq import Groq  # type: ignore
 
         client = Groq(api_key=api_key)
-        model = os.getenv("GROQ_CODER_MODEL", "llama-3.3-70b-versatile")
+        model = os.getenv("GROQ_CODER_MODEL", "openai/gpt-oss-120b")
         system_prompt = (
             "Eres el agente Coder de ATOMUM. Recibes directiva, target, tareas y contexto "
             "previo (Threat Intel, Vulnerability Analyst, Security Reviewer, Task Decomposer). "
